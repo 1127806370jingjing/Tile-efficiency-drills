@@ -3380,11 +3380,15 @@ h1 {
 
 .table-tools {
   display: grid;
-  grid-template-columns: minmax(180px, 240px) minmax(260px, 420px);
+  grid-template-columns: minmax(260px, 420px);
   align-items: center;
   justify-content: center;
   gap: 10px;
   min-width: 0;
+}
+
+.table-tools.listening-tools {
+  grid-template-columns: minmax(180px, 240px) minmax(260px, 420px);
 }
 
 .hint-row.compact {
@@ -3582,6 +3586,11 @@ h1 {
     grid-template-columns: minmax(104px, auto) minmax(220px, 1fr) auto;
   }
 
+  .table-tools.listening-tools {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+
   .hint-row.compact {
     width: 100%;
   }
@@ -3612,6 +3621,16 @@ h1 {
   .table-actions {
     grid-column: 2;
     grid-row: 1;
+  }
+
+  .table-tools {
+    grid-column: 1 / -1;
+    grid-template-columns: 1fr;
+    justify-self: stretch;
+  }
+
+  .table-tools.listening-tools {
+    grid-template-columns: 1fr;
   }
 
   .hint-row.compact {

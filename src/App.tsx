@@ -546,7 +546,7 @@ export function App() {
                 {tileLabel(mode === "discard" ? exercise.gold : mode === "listening" ? listeningExercise.gold : drawSession.gold)}
               </strong>
             </div>
-            <div className="table-tools">
+            <div className={`table-tools ${mode === "listening" ? "listening-tools" : ""}`}>
               {mode === "listening" ? (
                 <ListeningModeSwitch
                   listeningMode={listeningMode}
@@ -626,7 +626,12 @@ export function App() {
               onNext={nextExercise}
             />
           ) : mode === "listening" ? (
-            <ListeningFeedbackPanel exercise={listeningExercise} answer={listeningAnswer} onNext={nextExercise} />
+            <ListeningFeedbackPanel
+              exercise={listeningExercise}
+              answer={listeningAnswer}
+              hintLevel={hintLevel}
+              onNext={nextExercise}
+            />
           ) : (
             <DrawFeedbackPanel
               session={drawSession}
@@ -1941,10 +1946,12 @@ function DrawFeedbackPanel({
 function ListeningFeedbackPanel({
   exercise,
   answer,
+  hintLevel,
   onNext,
 }: {
   exercise: ListeningExercise;
   answer: ListeningAnswer | null;
+  hintLevel: HintLevel;
   onNext: () => void;
 }) {
   const waits = exercise.waitingTiles.map((tile) => tileLabel(tile));
@@ -1956,13 +1963,13 @@ function ListeningFeedbackPanel({
           <span className="feedback-icon">
             <span className="badge-symbol">听</span>
           </span>
-        <div>
-          <strong>听牌判断</strong>
-          <span>{exercise.focus}</span>
+          <div>
+            <strong>听牌判断</strong>
+            <span>{exercise.focus}</span>
+          </div>
         </div>
-      </div>
-      <p className="feedback-brief">{exercise.reviewTip}</p>
-        {exercise.specialPatterns.length > 0 ? (
+        {hintLevel !== "off" ? <p className="feedback-brief">{exercise.reviewTip}</p> : null}
+        {hintLevel === "teaching" && exercise.specialPatterns.length > 0 ? (
           <div className="special-list">
             {exercise.specialPatterns.map((pattern) => (
               <div key={pattern.name}>
@@ -1998,10 +2005,12 @@ function ListeningFeedbackPanel({
         <MiniTileList tiles={exercise.waitingTiles} emptyText="暂无听口" />
       </div>
 
-      <div className="reason-list">
-        <p>{answer.correct ? "选择完整，下一题继续保持。" : "上方就是本题全部正确听口；先按花色对照，再试着把每张进张补进面子或雀头。"}</p>
-        <p>{exercise.reviewTip}</p>
-      </div>
+      {hintLevel !== "off" ? (
+        <div className="reason-list">
+          <p>{answer.correct ? "选择完整，下一题继续保持。" : "上方就是本题全部正确听口；先按花色对照，再试着把每张进张补进面子或雀头。"}</p>
+          {hintLevel === "teaching" ? <p>{exercise.reviewTip}</p> : null}
+        </div>
+      ) : null}
     </div>
   );
 }
