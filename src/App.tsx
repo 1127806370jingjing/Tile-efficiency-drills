@@ -776,7 +776,10 @@ function ModeDock({
         aria-label="切换练习模式，长按可移动位置"
         title="点击展开或收起，长按可上下移动"
       >
-        {open ? <X size={18} /> : <Menu size={18} />}
+        <span className="mode-tab-icon" aria-hidden="true">
+          <Menu className="mode-menu-icon" size={18} />
+          <X className="mode-close-icon" size={18} />
+        </span>
         <span>模式</span>
       </button>
       <div className="mode-drawer">

@@ -111,14 +111,18 @@ h1 {
 .mode-dock {
   position: fixed;
   right: 0;
-  z-index: 20;
+  z-index: 55;
   display: grid;
   grid-template-columns: auto auto;
   align-items: start;
-  transition: top 120ms ease;
+  filter: drop-shadow(0 18px 34px rgba(12, 67, 56, 0.16));
+  transition:
+    top 120ms ease,
+    filter 180ms ease;
 }
 
 .mode-tab {
+  position: relative;
   grid-column: 2;
   grid-row: 1;
   display: grid;
@@ -131,8 +135,79 @@ h1 {
   color: #fff;
   background: linear-gradient(180deg, #166b5a, #0c4338);
   box-shadow: 0 16px 34px rgba(12, 67, 56, 0.24);
+  overflow: hidden;
   touch-action: none;
   user-select: none;
+  transform-origin: right center;
+  transition:
+    border-radius 220ms ease,
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background 220ms ease,
+    box-shadow 220ms ease;
+}
+
+.mode-dock.open {
+  filter: drop-shadow(0 24px 42px rgba(12, 67, 56, 0.24));
+}
+
+.mode-dock.open .mode-tab {
+  border-radius: 0 0 0 18px;
+  transform: translateX(-1px);
+}
+
+.mode-tab::before {
+  content: "";
+  position: absolute;
+  inset: 8px 7px auto;
+  height: 32px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.14);
+  opacity: 0;
+  transform: scale(0.7);
+  transition:
+    opacity 200ms ease,
+    transform 220ms ease;
+}
+
+.mode-dock.open .mode-tab::before {
+  opacity: 1;
+  transform: scale(1);
+}
+
+.mode-tab-icon {
+  position: relative;
+  display: grid;
+  width: 22px;
+  height: 22px;
+  place-items: center;
+  overflow: hidden;
+}
+
+.mode-tab-icon svg {
+  grid-area: 1 / 1;
+  transition:
+    opacity 200ms ease,
+    transform 260ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+.mode-menu-icon {
+  opacity: 1;
+  transform: translateY(0) rotate(0deg) scale(1);
+}
+
+.mode-close-icon {
+  opacity: 0;
+  transform: translateY(16px) rotate(-90deg) scale(0.65);
+}
+
+.mode-dock.open .mode-menu-icon {
+  opacity: 0;
+  transform: translateY(-16px) rotate(90deg) scale(0.65);
+}
+
+.mode-dock.open .mode-close-icon {
+  opacity: 1;
+  transform: translateY(0) rotate(0deg) scale(1);
 }
 
 .mode-dock.dragging {
@@ -152,6 +227,7 @@ h1 {
 }
 
 .mode-drawer {
+  position: relative;
   grid-column: 1;
   grid-row: 1;
   display: grid;
@@ -166,22 +242,41 @@ h1 {
   backdrop-filter: blur(18px);
   opacity: 0;
   pointer-events: none;
-  transform: translateX(calc(100% + 42px));
+  transform: translateX(calc(100% + 18px)) scaleX(0.92);
+  transform-origin: right center;
   transition:
-    opacity 160ms ease,
-    transform 180ms ease;
+    opacity 180ms ease,
+    transform 260ms cubic-bezier(0.2, 0.85, 0.25, 1.08);
+}
+
+.mode-drawer::after {
+  content: "";
+  position: absolute;
+  top: 14px;
+  right: -8px;
+  width: 14px;
+  height: 68px;
+  border-radius: 0 999px 999px 0;
+  background: inherit;
+  opacity: 0;
+  transition: opacity 180ms ease;
 }
 
 .mode-dock.open .mode-drawer {
   opacity: 1;
   pointer-events: auto;
-  transform: translateX(0);
+  transform: translateX(0) scaleX(1);
+}
+
+.mode-dock.open .mode-drawer::after {
+  opacity: 1;
 }
 
 .mode-button {
+  position: relative;
   display: inline-flex;
   align-items: center;
-  justify-content: center;
+  justify-content: flex-start;
   gap: 8px;
   min-height: 42px;
   padding: 0 12px;
@@ -189,12 +284,52 @@ h1 {
   color: var(--muted);
   background: transparent;
   white-space: nowrap;
+  opacity: 0;
+  transform: translateX(18px);
+  transition:
+    opacity 180ms ease,
+    transform 240ms cubic-bezier(0.2, 0.85, 0.25, 1.08),
+    background 180ms ease,
+    color 180ms ease,
+    box-shadow 180ms ease;
+}
+
+.mode-button svg {
+  flex: 0 0 auto;
+  transition:
+    transform 220ms ease,
+    color 180ms ease;
+}
+
+.mode-dock.open .mode-button {
+  opacity: 1;
+  transform: translateX(0);
+}
+
+.mode-dock.open .mode-button:nth-child(1) {
+  transition-delay: 40ms;
+}
+
+.mode-dock.open .mode-button:nth-child(2) {
+  transition-delay: 75ms;
+}
+
+.mode-dock.open .mode-button:nth-child(3) {
+  transition-delay: 110ms;
 }
 
 .mode-button.active {
   color: #fff;
   background: linear-gradient(135deg, var(--felt-dark), #2f8b6b);
   box-shadow: 0 10px 24px rgba(18, 99, 79, 0.18);
+}
+
+.mode-button.active svg {
+  transform: scale(1.12) rotate(-8deg);
+}
+
+.mode-button:hover svg {
+  transform: translateX(-2px) scale(1.08);
 }
 
 .mode-button.locked {
