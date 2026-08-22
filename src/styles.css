@@ -110,12 +110,12 @@ h1 {
 
 .mode-dock {
   position: fixed;
-  top: 128px;
   right: 0;
   z-index: 20;
   display: grid;
   grid-template-columns: auto auto;
   align-items: start;
+  transition: top 120ms ease;
 }
 
 .mode-tab {
@@ -131,6 +131,17 @@ h1 {
   color: #fff;
   background: linear-gradient(180deg, #166b5a, #0c4338);
   box-shadow: 0 16px 34px rgba(12, 67, 56, 0.24);
+  touch-action: none;
+  user-select: none;
+}
+
+.mode-dock.dragging {
+  transition: none;
+}
+
+.mode-dock.dragging .mode-tab {
+  cursor: grabbing;
+  transform: scale(1.03);
 }
 
 .mode-tab span {
@@ -161,8 +172,7 @@ h1 {
     transform 180ms ease;
 }
 
-.mode-dock.open .mode-drawer,
-.mode-dock:focus-within .mode-drawer {
+.mode-dock.open .mode-drawer {
   opacity: 1;
   pointer-events: auto;
   transform: translateX(0);
@@ -970,9 +980,6 @@ h1 {
     grid-template-columns: 1fr;
   }
 
-  .mode-dock {
-    top: 84px;
-  }
 }
 
 @media (max-width: 560px) {
@@ -1014,10 +1021,6 @@ h1 {
     gap: 8px;
     min-height: 330px;
     padding-top: 28px;
-  }
-
-  .mode-dock {
-    top: 72px;
   }
 
   .mode-tab {

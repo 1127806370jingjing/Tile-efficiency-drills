@@ -1,5 +1,5 @@
 import { Award, BookOpen, Bot, Check, Eye, Loader2, Menu, RefreshCcw, Search, Send, Sparkles, Target, X } from "lucide-react";
-import { type DragEvent, useEffect, useMemo, useState } from "react";
+import { type DragEvent, type PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   type DiscardEvaluation,
   type Exercise,
@@ -58,6 +58,7 @@ type TokenUsage = {
 };
 
 const statsKey = "fuzhou-mahjong-trainer-stats";
+const modeDockTopKey = "fuzhou-mahjong-mode-dock-top";
 const suitOrder: Suit[] = ["wan", "tong", "tiao"];
 const suitNames: Record<Suit, string> = {
   wan: "万",
@@ -91,6 +92,32 @@ function loadStats(): Stats {
   } catch {
     return fallback;
   }
+}
+
+function getDefaultDockTop(): number {
+  if (typeof window === "undefined") return 128;
+  if (window.innerWidth <= 560) return 72;
+  if (window.innerWidth <= 920) return 84;
+  return 128;
+}
+
+function clampDockTop(top: number): number {
+  if (typeof window === "undefined") return top;
+  return Math.min(Math.max(16, top), Math.max(16, window.innerHeight - 132));
+}
+
+function loadModeDockTop(): number {
+  try {
+    const raw = localStorage.getItem(modeDockTopKey);
+    if (raw !== null) {
+      const saved = Number(raw);
+      if (Number.isFinite(saved)) return clampDockTop(saved);
+    }
+  } catch {
+    return getDefaultDockTop();
+  }
+
+  return getDefaultDockTop();
 }
 
 export function App() {
@@ -411,9 +438,111 @@ function ModeDock({
   onToggle: () => void;
   onModeChange: (mode: PracticeMode) => void;
 }) {
+  const [dockTop, setDockTop] = useState(loadModeDockTop);
+  const [dragging, setDragging] = useState(false);
+  const dragRef = useRef<{
+    pointerId: number;
+    startY: number;
+    startTop: number;
+    timer: number | null;
+    dragging: boolean;
+    moved: boolean;
+  } | null>(null);
+
+  function clearLongPressTimer() {
+    if (dragRef.current?.timer) {
+      window.clearTimeout(dragRef.current.timer);
+      dragRef.current.timer = null;
+    }
+  }
+
+  function startDockGesture(event: PointerEvent<HTMLButtonElement>) {
+    if (event.button !== 0) return;
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture is a nice-to-have; the dock still supports click toggling without it.
+    }
+    const gesture = {
+      pointerId: event.pointerId,
+      startY: event.clientY,
+      startTop: dockTop,
+      timer: null as number | null,
+      dragging: false,
+      moved: false,
+    };
+    gesture.timer = window.setTimeout(() => {
+      gesture.dragging = true;
+      setDragging(true);
+    }, 260);
+    dragRef.current = gesture;
+  }
+
+  function moveDockGesture(event: PointerEvent<HTMLButtonElement>) {
+    const gesture = dragRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+
+    const distance = event.clientY - gesture.startY;
+    if (Math.abs(distance) > 4) gesture.moved = true;
+    if (!gesture.dragging) return;
+
+    event.preventDefault();
+    setDockTop(clampDockTop(gesture.startTop + distance));
+  }
+
+  function endDockGesture(event: PointerEvent<HTMLButtonElement>) {
+    const gesture = dragRef.current;
+    if (!gesture || gesture.pointerId !== event.pointerId) return;
+
+    clearLongPressTimer();
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // The pointer may already be released on some mobile browsers.
+    }
+    dragRef.current = null;
+    setDragging(false);
+
+    if (gesture.dragging) {
+      try {
+        localStorage.setItem(modeDockTopKey, String(clampDockTop(gesture.startTop + event.clientY - gesture.startY)));
+      } catch {
+        // Local storage may be unavailable in private modes; the drag still works for this session.
+      }
+      return;
+    }
+
+    onToggle();
+  }
+
+  function cancelDockGesture(event: PointerEvent<HTMLButtonElement>) {
+    if (dragRef.current?.pointerId === event.pointerId) {
+      clearLongPressTimer();
+      dragRef.current = null;
+      setDragging(false);
+    }
+  }
+
   return (
-    <nav className={`mode-dock ${open ? "open" : ""}`} aria-label="练习模式">
-      <button className="mode-tab" type="button" onClick={onToggle} aria-expanded={open} aria-label="切换练习模式">
+    <nav className={`mode-dock ${open ? "open" : ""} ${dragging ? "dragging" : ""}`} style={{ top: dockTop }} aria-label="练习模式">
+      <button
+        className="mode-tab"
+        type="button"
+        onPointerDown={startDockGesture}
+        onPointerMove={moveDockGesture}
+        onPointerUp={endDockGesture}
+        onPointerCancel={cancelDockGesture}
+        onContextMenu={(event) => event.preventDefault()}
+        onKeyDown={(event) => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            onToggle();
+          }
+        }}
+        aria-expanded={open}
+        aria-label="切换练习模式，长按可移动位置"
+        title="点击展开或收起，长按可上下移动"
+      >
         {open ? <X size={18} /> : <Menu size={18} />}
         <span>模式</span>
       </button>
