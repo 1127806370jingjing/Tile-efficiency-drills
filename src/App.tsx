@@ -1099,15 +1099,24 @@ function FeedbackPanel({
     const lightHints = exercise.evaluations.slice(0, 3);
 
     return (
-      <div className="feedback-panel">
-        <div className="panel-title">
-          <Target size={18} />
-          选择你要打掉的牌
+      <div className="feedback-panel guide-panel">
+        <div className="feedback-hero">
+          <span className="feedback-icon">
+            <Target size={22} />
+          </span>
+          <div>
+            <strong>选择弃牌</strong>
+            <span>找出打掉后进张更宽的牌</span>
+          </div>
         </div>
-        <p className="body-copy">目标是找出打掉后牌形保留最好、有效进张最多的牌。</p>
+        <p className="feedback-brief">先比较孤张、边张、嵌张，再看打出后听牌种类和剩余张数。</p>
         {pendingTileId ? (
-          <div className="pending-card">
-            已选中 <strong>{tileLabel(exercise.hand.find((tile) => tile.id === pendingTileId)!)}</strong>，再次点击同一张牌或点确认按钮提交。
+          <div className="feedback-status pending-card">
+            <Check size={17} />
+            <span>
+              已选中 <strong>{tileLabel(exercise.hand.find((tile) => tile.id === pendingTileId)!)}</strong>
+            </span>
+            <em>再次点击同张或点确认</em>
           </div>
         ) : null}
         {exercise.specialPatterns.length > 0 ? (
@@ -1121,9 +1130,15 @@ function FeedbackPanel({
           </div>
         ) : null}
         {hintLevel !== "off" ? (
-          <div className="hint-card">
+          <div className="recommend-strip">
             <span>可优先观察</span>
-            <strong>{lightHints.map((item) => tileLabel(item.tile)).join("、")}</strong>
+            <div>
+              {lightHints.map((item, index) => (
+                <strong key={item.tile.id}>
+                  {index + 1}. {tileLabel(item.tile)}
+                </strong>
+              ))}
+            </div>
           </div>
         ) : null}
       </div>
@@ -1133,17 +1148,49 @@ function FeedbackPanel({
   const recommended = bestEvaluations.map((item) => tileLabel(item.tile)).join("、");
 
   return (
-    <div className={`feedback-panel answered ${answer.correct ? "correct" : "wrong"}`}>
-      <div className="result-line">
-        <span>{answer.correct ? "判断正确" : "这张不是最优弃牌"}</span>
-        <strong>{answer.correct ? "+1" : "再看牌效"}</strong>
+    <div className={`feedback-panel answered review-panel ${answer.correct ? "correct" : "wrong"}`}>
+      <div className="review-head">
+        <span className="review-badge">
+          {answer.correct ? <Check size={20} /> : <X size={20} />}
+        </span>
+        <div>
+          <strong>{answer.correct ? "选择正确" : "这张不是最优"}</strong>
+          <span>
+            打 {tileLabel(answer.evaluation.tile)} · 听牌 {answer.evaluation.winningDraws.length} 种 · 共{" "}
+            {answer.evaluation.winningDrawCopies} 张
+          </span>
+        </div>
       </div>
-      <p className="body-copy">
-        推荐打：<strong>{recommended}</strong>
-      </p>
-      <EvaluationDetail evaluation={answer.evaluation} hintLevel={hintLevel} />
-      {!answer.correct ? (
-        <EvaluationDetail evaluation={bestEvaluations[0]} hintLevel="teaching" title="推荐弃牌说明" />
+
+      <div className="review-grid">
+        <div className="review-section">
+          <span className="section-kicker">有效进张</span>
+          <MiniTileList tiles={answer.evaluation.winningDraws} emptyText="暂无直接听牌" />
+        </div>
+        <div className="review-section">
+          <span className="section-kicker">推荐前三</span>
+          <div className="top-candidates">
+            {exercise.evaluations.slice(0, 3).map((item, index) => (
+              <div className={exercise.bestDiscardIds.includes(item.tile.id) ? "top-card best" : "top-card"} key={item.tile.id}>
+                <strong>
+                  {index + 1}. 打 {tileLabel(item.tile)}
+                </strong>
+                <span>
+                  听牌 {item.winningDraws.length} 种 · {item.winningDrawCopies} 张
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {hintLevel !== "off" ? (
+        <div className="reason-list">
+          {(answer.correct ? answer.evaluation.reasons : bestEvaluations[0].reasons).map((reason) => (
+            <p key={reason}>{reason}</p>
+          ))}
+          {!answer.correct ? <p>推荐打：{recommended}</p> : null}
+        </div>
       ) : null}
       <button className="primary-action" type="button" onClick={onNext}>
         下一题
@@ -1168,12 +1215,17 @@ function ListeningFeedbackPanel({
 
   if (!answer) {
     return (
-      <div className="feedback-panel">
-        <div className="panel-title">
-          <Eye size={18} />
-          听牌判断
+      <div className="feedback-panel guide-panel">
+        <div className="feedback-hero">
+          <span className="feedback-icon">
+            <Eye size={22} />
+          </span>
+          <div>
+            <strong>听牌判断</strong>
+            <span>选择所有摸到即可胡的牌</span>
+          </div>
         </div>
-        <p className="body-copy">这是一副 16 张手牌。请选择所有“摸到即可胡”的牌。</p>
+        <p className="feedback-brief">先找缺口，再把金牌当万能牌补进面子或雀头里试一遍。</p>
         {exercise.specialPatterns.length > 0 ? (
           <div className="special-list">
             {exercise.specialPatterns.map((pattern) => (
@@ -1189,22 +1241,48 @@ function ListeningFeedbackPanel({
   }
 
   return (
-    <div className={`feedback-panel answered ${answer.correct ? "correct" : "wrong"}`}>
-      <div className="result-line">
-        <span>{answer.correct ? "听牌判断正确" : "听口还没找全"}</span>
-        <strong>{answer.correct ? "+1" : "复盘"}</strong>
+    <div className={`feedback-panel answered review-panel ${answer.correct ? "correct" : "wrong"}`}>
+      <div className="review-head">
+        <span className="review-badge">
+          {answer.correct ? <Check size={20} /> : <X size={20} />}
+        </span>
+        <div>
+          <strong>{answer.correct ? "听牌判断正确" : "听口还没找全"}</strong>
+          <span>
+            听牌 {waits.length} 种 · 共 {exercise.waitingCopies} 张
+          </span>
+        </div>
       </div>
-      <div className="explain-block">
-        <span>正确听牌</span>
-        <p>
-          <strong>{waits.join("、")}</strong>，合计 {exercise.waitingCopies} 张剩余机会。
-        </p>
+
+      <div className="review-section">
+        <span className="section-kicker">正确听牌</span>
+        <MiniTileList tiles={exercise.waitingTiles} emptyText="暂无听口" />
+      </div>
+
+      <div className="reason-list">
         {missed.length > 0 ? <p>漏选：{missed.join("、")}</p> : null}
         {extra.length > 0 ? <p>多选：{extra.join("、")}</p> : null}
+        {answer.correct ? <p>选择完整，下一题继续保持。</p> : null}
       </div>
       <button className="primary-action" type="button" onClick={onNext}>
         下一题
       </button>
+    </div>
+  );
+}
+
+function MiniTileList({ tiles, emptyText }: { tiles: Tile[]; emptyText: string }) {
+  if (tiles.length === 0) {
+    return <span className="empty-mini-tiles">{emptyText}</span>;
+  }
+
+  return (
+    <div className="mini-tile-list">
+      {tiles.map((tile) => (
+        <span className={`mini-tile ${tile.suit}`} key={tile.id}>
+          <TileFace tile={{ ...tile, instanceId: tile.id }} isGold={false} />
+        </span>
+      ))}
     </div>
   );
 }
