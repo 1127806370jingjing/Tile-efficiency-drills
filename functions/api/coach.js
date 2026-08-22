@@ -35,7 +35,7 @@ export async function onRequestPost(context) {
     },
     body: JSON.stringify({
       model: env.OPENAI_MODEL || "gpt-4.1-mini",
-      max_output_tokens: 900,
+      max_output_tokens: Number(env.OPENAI_MAX_OUTPUT_TOKENS || 500),
       input: [
         {
           role: "system",
@@ -64,7 +64,11 @@ export async function onRequestPost(context) {
 
   const data = await response.json();
   const answer = extractResponseText(data);
-  return json({ answer: answer || "我看到了这手牌，但暂时没生成解释。你可以换个问法再试一次。" });
+  return json({
+    answer: answer || "我看到了这手牌，但暂时没生成解释。你可以换个问法再试一次。",
+    model: data.model || env.OPENAI_MODEL || "gpt-4.1-mini",
+    usage: normalizeUsage(data.usage),
+  });
 }
 
 export async function onRequestGet() {
@@ -88,4 +92,13 @@ function extractResponseText(data) {
     }
   }
   return parts.join("\n").trim();
+}
+
+function normalizeUsage(usage) {
+  if (!usage) return null;
+  return {
+    inputTokens: Number(usage.input_tokens || 0),
+    outputTokens: Number(usage.output_tokens || 0),
+    totalTokens: Number(usage.total_tokens || 0),
+  };
 }

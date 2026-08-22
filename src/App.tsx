@@ -37,6 +37,14 @@ type CoachMessage = {
   id: string;
   role: "user" | "assistant";
   text: string;
+  usage?: TokenUsage;
+  model?: string;
+};
+
+type TokenUsage = {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
 };
 
 const statsKey = "fuzhou-mahjong-trainer-stats";
@@ -168,13 +176,15 @@ export function App() {
         throw new Error(`coach api ${response.status}`);
       }
 
-      const data = (await response.json()) as { answer?: string };
+      const data = (await response.json()) as { answer?: string; model?: string; usage?: TokenUsage | null };
       setCoachMessages((current) => [
         ...current,
         {
           id: crypto.randomUUID(),
           role: "assistant",
           text: data.answer?.trim() || buildLocalCoachReply(exercise, answer, trimmedQuestion),
+          usage: data.usage ?? undefined,
+          model: data.model,
         },
       ]);
     } catch {
@@ -184,6 +194,7 @@ export function App() {
           id: crypto.randomUUID(),
           role: "assistant",
           text: buildLocalCoachReply(exercise, answer, trimmedQuestion),
+          model: "本地规则引擎",
         },
       ]);
     } finally {
@@ -547,6 +558,7 @@ function CoachPanel({
         {messages.map((message) => (
           <div className={`coach-message ${message.role}`} key={message.id}>
             {message.text}
+            {message.usage ? <TokenUsageLine usage={message.usage} model={message.model} /> : null}
           </div>
         ))}
         {loading ? (
@@ -581,6 +593,15 @@ function CoachPanel({
         </button>
       </form>
     </div>
+  );
+}
+
+function TokenUsageLine({ usage, model }: { usage: TokenUsage; model?: string }) {
+  return (
+    <span className="token-usage">
+      {model ? `${model} · ` : null}
+      输入 {usage.inputTokens} / 输出 {usage.outputTokens} / 共 {usage.totalTokens} tokens
+    </span>
   );
 }
 
