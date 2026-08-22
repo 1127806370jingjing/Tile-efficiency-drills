@@ -425,7 +425,8 @@ h1 {
 }
 
 .stats-panel,
-.feedback-panel {
+.feedback-panel,
+.coach-panel {
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(251, 252, 248, 0.92);
@@ -433,6 +434,10 @@ h1 {
 }
 
 .stats-panel {
+  padding: 16px;
+}
+
+.coach-panel {
   padding: 16px;
 }
 
@@ -466,6 +471,102 @@ h1 {
 
 .feedback-panel {
   padding: 18px;
+}
+
+.coach-messages {
+  display: grid;
+  gap: 8px;
+  max-height: 230px;
+  margin-top: 14px;
+  overflow-y: auto;
+  padding-right: 2px;
+}
+
+.coach-message {
+  width: fit-content;
+  max-width: 92%;
+  padding: 10px 12px;
+  border-radius: 8px;
+  white-space: pre-wrap;
+  color: #31453f;
+  background: #f1f5ed;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.coach-message.user {
+  justify-self: end;
+  color: #fff;
+  background: var(--felt-dark);
+}
+
+.coach-message.loading {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.coach-message.loading svg {
+  animation: spin 900ms linear infinite;
+}
+
+.quick-questions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.quick-questions button {
+  min-height: 32px;
+  padding: 0 10px;
+  border: 1px solid rgba(18, 32, 29, 0.1);
+  border-radius: 8px;
+  color: var(--felt-dark);
+  background: #eef4ef;
+  cursor: pointer;
+  font-size: 13px;
+}
+
+.quick-questions button:disabled {
+  cursor: not-allowed;
+  opacity: 0.58;
+}
+
+.coach-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 42px;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.coach-form input {
+  min-width: 0;
+  min-height: 42px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: #fff;
+  font: inherit;
+  font-size: 14px;
+}
+
+.coach-form button {
+  display: grid;
+  width: 42px;
+  height: 42px;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  color: #fff;
+  background: var(--felt-dark);
+  cursor: pointer;
+}
+
+.coach-form button:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .special-list {
@@ -552,6 +653,12 @@ h1 {
   color: #fff;
   background: linear-gradient(135deg, var(--accent), #b73928);
   font-weight: 800;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 @media (max-width: 920px) {

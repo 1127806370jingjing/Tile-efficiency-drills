@@ -1,4 +1,4 @@
-import { Award, BookOpen, Eye, RefreshCcw, Sparkles, Target } from "lucide-react";
+import { Award, BookOpen, Bot, Eye, Loader2, RefreshCcw, Send, Sparkles, Target } from "lucide-react";
 import { type DragEvent, useEffect, useMemo, useState } from "react";
 import {
   type DiscardEvaluation,
@@ -31,6 +31,12 @@ type Stats = {
 type HandRow = {
   suit: Suit;
   tileIds: string[];
+};
+
+type CoachMessage = {
+  id: string;
+  role: "user" | "assistant";
+  text: string;
 };
 
 const statsKey = "fuzhou-mahjong-trainer-stats";
@@ -75,6 +81,15 @@ export function App() {
   const [hintLevel, setHintLevel] = useState<HintLevel>("teaching");
   const [stats, setStats] = useState<Stats>(() => loadStats());
   const [handRows, setHandRows] = useState<HandRow[]>(() => buildHandRows(exercise.hand));
+  const [coachMessages, setCoachMessages] = useState<CoachMessage[]>(() => [
+    {
+      id: crypto.randomUUID(),
+      role: "assistant",
+      text: "我是你的福州麻将 AI 教练。你可以问：为什么推荐打这张、我刚才打得怎么样、这手牌怎么拆。",
+    },
+  ]);
+  const [coachQuestion, setCoachQuestion] = useState("");
+  const [coachLoading, setCoachLoading] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(statsKey, JSON.stringify(stats));
@@ -93,6 +108,13 @@ export function App() {
   function nextExercise() {
     setExercise(createExercise());
     setAnswer(null);
+    setCoachMessages([
+      {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        text: "新题已刷新。可以先自己判断，再问我这手牌的牌效。",
+      },
+    ]);
   }
 
   function chooseTile(tile: TileInstance) {
@@ -113,6 +135,60 @@ export function App() {
         today: current.today + 1,
       };
     });
+  }
+
+  async function askCoach(question: string) {
+    const trimmedQuestion = question.trim();
+    if (!trimmedQuestion || coachLoading) return;
+
+    const userMessage: CoachMessage = {
+      id: crypto.randomUUID(),
+      role: "user",
+      text: trimmedQuestion,
+    };
+
+    setCoachMessages((current) => [...current, userMessage]);
+    setCoachQuestion("");
+    setCoachLoading(true);
+
+    try {
+      if (window.location.port === "5173") {
+        throw new Error("local vite preview uses rule-based coach fallback");
+      }
+
+      const response = await fetch("/api/coach", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(buildCoachPayload(exercise, answer, trimmedQuestion)),
+      });
+
+      if (!response.ok) {
+        throw new Error(`coach api ${response.status}`);
+      }
+
+      const data = (await response.json()) as { answer?: string };
+      setCoachMessages((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          text: data.answer?.trim() || buildLocalCoachReply(exercise, answer, trimmedQuestion),
+        },
+      ]);
+    } catch {
+      setCoachMessages((current) => [
+        ...current,
+        {
+          id: crypto.randomUUID(),
+          role: "assistant",
+          text: buildLocalCoachReply(exercise, answer, trimmedQuestion),
+        },
+      ]);
+    } finally {
+      setCoachLoading(false);
+    }
   }
 
   return (
@@ -174,6 +250,14 @@ export function App() {
 
         <aside className="side-panel">
           <StatsPanel stats={stats} />
+          <CoachPanel
+            messages={coachMessages}
+            question={coachQuestion}
+            loading={coachLoading}
+            answer={answer}
+            onQuestionChange={setCoachQuestion}
+            onAsk={askCoach}
+          />
           <FeedbackPanel
             answer={answer}
             exercise={exercise}
@@ -185,6 +269,55 @@ export function App() {
       </section>
     </main>
   );
+}
+
+function buildCoachPayload(exercise: Exercise, answer: AnswerState | null, question: string) {
+  const bestEvaluations = getBestEvaluations(exercise);
+
+  return {
+    question,
+    ruleset: "福州麻将新手教学版；不计分、不算花；金牌按万能牌理解。",
+    gold: tileLabel(exercise.gold),
+    hand: exercise.hand.map((tile) => tileLabel(tile)),
+    selectedDiscard: answer
+      ? {
+          tile: tileLabel(answer.evaluation.tile),
+          correct: answer.correct,
+          evaluation: summarizeEvaluation(answer.evaluation),
+        }
+      : null,
+    recommendedDiscards: bestEvaluations.map(summarizeEvaluation),
+    topCandidates: exercise.evaluations.slice(0, 6).map(summarizeEvaluation),
+    specialPatterns: exercise.specialPatterns,
+  };
+}
+
+function summarizeEvaluation(evaluation: DiscardEvaluation) {
+  return {
+    tile: tileLabel(evaluation.tile),
+    score: Math.round(evaluation.score),
+    winningDrawKinds: evaluation.winningDraws.length,
+    winningDrawCopies: evaluation.winningDrawCopies,
+    winningDraws: evaluation.winningDraws.map((tile) => tileLabel(tile)),
+    reasons: evaluation.reasons,
+  };
+}
+
+function buildLocalCoachReply(exercise: Exercise, answer: AnswerState | null, question: string): string {
+  const best = getBestEvaluations(exercise)[0];
+  const selected = answer?.evaluation;
+  const target = selected ?? best;
+  const prefix = question.includes("我") && selected ? `你刚才打 ${tileLabel(selected.tile)}。` : "";
+  const apiHint = "目前本地预览没有连接 Cloudflare 后端，我先用规则引擎给你一个简版解释。";
+
+  return [
+    apiHint,
+    `${prefix}这手牌推荐优先看 ${tileLabel(best.tile)}，打出后有 ${best.winningDraws.length} 种胡牌进张，共 ${best.winningDrawCopies} 张剩余机会。`,
+    `如果打 ${tileLabel(target.tile)}：${target.reasons.join(" ")}`,
+    exercise.gold.id === target.tile.id
+      ? "注意：这张是金牌，金通常是全手牌效最高的牌，不建议随便打。"
+      : `本局金牌是 ${tileLabel(exercise.gold)}，判断时要优先考虑它能补顺、补刻或补雀头。`,
+  ].join("\n\n");
 }
 
 function buildHandRows(hand: TileInstance[]): HandRow[] {
@@ -381,6 +514,72 @@ function StatsPanel({ stats }: { stats: Stats }) {
         <Metric label="最佳" value={stats.bestStreak} />
         <Metric label="今日" value={stats.today} />
       </div>
+    </div>
+  );
+}
+
+function CoachPanel({
+  messages,
+  question,
+  loading,
+  answer,
+  onQuestionChange,
+  onAsk,
+}: {
+  messages: CoachMessage[];
+  question: string;
+  loading: boolean;
+  answer: AnswerState | null;
+  onQuestionChange: (question: string) => void;
+  onAsk: (question: string) => void;
+}) {
+  const quickQuestions = answer
+    ? ["我这张打得怎么样？", "为什么推荐打那张？", "用新手话讲一遍"]
+    : ["这手牌先看哪里？", "为什么这些牌牌效低？", "金牌现在怎么用？"];
+
+  return (
+    <div className="coach-panel">
+      <div className="panel-title">
+        <Bot size={18} />
+        AI 教练
+      </div>
+      <div className="coach-messages" aria-live="polite">
+        {messages.map((message) => (
+          <div className={`coach-message ${message.role}`} key={message.id}>
+            {message.text}
+          </div>
+        ))}
+        {loading ? (
+          <div className="coach-message assistant loading">
+            <Loader2 size={16} />
+            正在分析这手牌
+          </div>
+        ) : null}
+      </div>
+      <div className="quick-questions">
+        {quickQuestions.map((item) => (
+          <button key={item} type="button" onClick={() => onAsk(item)} disabled={loading}>
+            {item}
+          </button>
+        ))}
+      </div>
+      <form
+        className="coach-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          onAsk(question);
+        }}
+      >
+        <input
+          value={question}
+          onChange={(event) => onQuestionChange(event.target.value)}
+          placeholder="问：为什么这张牌效最低？"
+          disabled={loading}
+        />
+        <button type="submit" aria-label="发送问题" disabled={loading || !question.trim()}>
+          <Send size={17} />
+        </button>
+      </form>
     </div>
   );
 }
