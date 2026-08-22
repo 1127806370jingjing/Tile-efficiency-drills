@@ -32,6 +32,7 @@ type ListeningAnswer = {
 };
 
 type PracticeMode = "discard" | "listening" | "draw";
+type AppTheme = "night" | "sakura";
 
 type RewardState = {
   id: string;
@@ -70,6 +71,7 @@ type TokenUsage = {
 
 const statsKey = "fuzhou-mahjong-trainer-stats";
 const modeDockTopKey = "fuzhou-mahjong-mode-dock-top";
+const themeKey = "fuzhou-mahjong-theme";
 const suitOrder: Suit[] = ["wan", "tong", "tiao"];
 const suitNames: Record<Suit, string> = {
   wan: "万",
@@ -102,6 +104,15 @@ function loadStats(): Stats {
     return { ...fallback, ...parsed };
   } catch {
     return fallback;
+  }
+}
+
+function loadTheme(): AppTheme {
+  try {
+    const saved = localStorage.getItem(themeKey);
+    return saved === "sakura" ? "sakura" : "night";
+  } catch {
+    return "night";
   }
 }
 
@@ -155,6 +166,7 @@ function buildReward(streak: number): RewardState | null {
 
 export function App() {
   const [mode, setMode] = useState<PracticeMode>("discard");
+  const [theme, setTheme] = useState<AppTheme>(() => loadTheme());
   const [exercise, setExercise] = useState<Exercise>(() => createExercise());
   const [listeningExercise, setListeningExercise] = useState<ListeningExercise>(() => createListeningExercise());
   const [drawSession, setDrawSession] = useState<DrawSession>(() => createDrawSession());
@@ -184,6 +196,10 @@ export function App() {
   useEffect(() => {
     localStorage.setItem(statsKey, JSON.stringify(stats));
   }, [stats]);
+
+  useEffect(() => {
+    localStorage.setItem(themeKey, theme);
+  }, [theme]);
 
   useEffect(() => {
     const hand = mode === "discard" ? exercise.hand : mode === "listening" ? listeningExercise.hand : drawSession.hand;
@@ -472,7 +488,7 @@ export function App() {
   }
 
   return (
-    <main className="app-shell">
+    <main className={`app-shell theme-${theme}`}>
       <RewardOverlay reward={reward} onClose={() => setReward(null)} />
       <ModeDock
         mode={mode}
@@ -489,7 +505,25 @@ export function App() {
           </div>
         </div>
         <div className="hero-art" aria-hidden="true">
-          <img src="/mahjong-theme-art.jpg" alt="" />
+          <img src={theme === "sakura" ? "/sakura-coast-theme.jpg" : "/mahjong-theme-art.jpg"} alt="" />
+        </div>
+        <div className="theme-switcher" aria-label="主题切换">
+          <button
+            className={theme === "night" ? "active" : ""}
+            type="button"
+            onClick={() => setTheme("night")}
+            aria-pressed={theme === "night"}
+          >
+            夜樱牌桌
+          </button>
+          <button
+            className={theme === "sakura" ? "active" : ""}
+            type="button"
+            onClick={() => setTheme("sakura")}
+            aria-pressed={theme === "sakura"}
+          >
+            樱花海岸
+          </button>
         </div>
       </section>
 
@@ -1389,6 +1423,44 @@ function Metric({ label, value }: { label: string; value: string | number }) {
   );
 }
 
+function buildLightDiscardHints(evaluations: DiscardEvaluation[], gold: Tile): string[] {
+  const best = evaluations[0];
+  if (!best) return ["先找联系最弱的一张，再比较打出后是否更接近听牌。"];
+
+  const hints = [
+    best.tile.id === gold.id
+      ? "这手牌比较特殊，先检查金牌是否已经过多或成形。"
+      : "先从普通牌里找孤张、边张、嵌张，金牌一般先留住。",
+  ];
+
+  if (best.winningDraws.length > 0) {
+    hints.push("有打法已经能形成直接听牌，重点比较有效进张的数量。");
+  } else if (best.isolatedPenalty > 0) {
+    hints.push("这手有孤张负担，优先清理和周围牌联系弱的牌。");
+  } else {
+    hints.push("这手还没直接听牌，先保留顺子、对子和两面搭子。");
+  }
+
+  if (best.copiesInHand >= 2) {
+    hints.push("对子未必都要留，若它挡住整体速度，也可能成为可拆对象。");
+  }
+
+  return hints.slice(0, 3);
+}
+
+function LightHintBox({ hints }: { hints: string[] }) {
+  return (
+    <div className="recommend-strip light-hint-strip">
+      <span>轻提示</span>
+      <div>
+        {hints.map((hint) => (
+          <strong key={hint}>{hint}</strong>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function FeedbackPanel({
   answer,
   pendingTileId,
@@ -1406,6 +1478,7 @@ function FeedbackPanel({
 }) {
   if (!answer) {
     const lightHints = exercise.evaluations.slice(0, 3);
+    const directionHints = buildLightDiscardHints(exercise.evaluations, exercise.gold);
 
     return (
       <div className="feedback-panel guide-panel">
@@ -1438,9 +1511,10 @@ function FeedbackPanel({
             ))}
           </div>
         ) : null}
-        {hintLevel !== "off" ? (
+        {hintLevel === "light" ? <LightHintBox hints={directionHints} /> : null}
+        {hintLevel === "teaching" ? (
           <div className="recommend-strip">
-            <span>可优先观察</span>
+            <span>教学提示</span>
             <div>
               {lightHints.map((item, index) => (
                 <strong key={item.tile.id}>
@@ -1471,29 +1545,40 @@ function FeedbackPanel({
         </div>
       </div>
 
-      <div className="review-grid">
-        <div className="review-section">
-          <span className="section-kicker">有效进张</span>
-          <MiniTileList tiles={answer.evaluation.winningDraws} emptyText="暂无直接听牌" />
-        </div>
-        <div className="review-section">
-          <span className="section-kicker">推荐前三</span>
-          <div className="top-candidates">
-            {exercise.evaluations.slice(0, 3).map((item, index) => (
-              <div className={exercise.bestDiscardIds.includes(item.tile.id) ? "top-card best" : "top-card"} key={item.tile.id}>
-                <strong>
-                  {index + 1}. 打 {tileLabel(item.tile)}
-                </strong>
-                <span>
-                  听牌 {item.winningDraws.length} 种 · {item.winningDrawCopies} 张
-                </span>
-              </div>
-            ))}
+      {hintLevel === "teaching" ? (
+        <div className="review-grid">
+          <div className="review-section">
+            <span className="section-kicker">有效进张</span>
+            <MiniTileList tiles={answer.evaluation.winningDraws} emptyText="暂无直接听牌" />
+          </div>
+          <div className="review-section">
+            <span className="section-kicker">推荐前三</span>
+            <div className="top-candidates">
+              {exercise.evaluations.slice(0, 3).map((item, index) => (
+                <div className={exercise.bestDiscardIds.includes(item.tile.id) ? "top-card best" : "top-card"} key={item.tile.id}>
+                  <strong>
+                    {index + 1}. 打 {tileLabel(item.tile)}
+                  </strong>
+                  <span>
+                    听牌 {item.winningDraws.length} 种 · {item.winningDrawCopies} 张
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
-      {hintLevel !== "off" ? (
+      {hintLevel === "light" ? (
+        <div className="reason-list">
+          <p>
+            {answer.correct
+              ? "方向对了：你选到的是这手牌里保留整体速度较好的弃牌。"
+              : `这张不是最优。轻提示只给答案方向：推荐打 ${recommended}，先比较它和你选择的牌谁保留更多搭子。`}
+          </p>
+        </div>
+      ) : null}
+      {hintLevel === "teaching" ? (
         <div className="reason-list">
           {(answer.correct ? answer.evaluation.reasons : bestEvaluations[0].reasons).map((reason) => (
             <p key={reason}>{reason}</p>
@@ -1546,6 +1631,8 @@ function DrawFeedbackPanel({
   }
 
   if (!answer) {
+    const directionHints = buildLightDiscardHints(evaluations, session.gold);
+
     return (
       <div className="feedback-panel guide-panel">
         <div className="feedback-hero">
@@ -1569,9 +1656,10 @@ function DrawFeedbackPanel({
             <em>再次点击同张或点确认</em>
           </div>
         ) : null}
-        {best && hintLevel !== "off" ? (
+        {best && hintLevel === "light" ? <LightHintBox hints={directionHints} /> : null}
+        {best && hintLevel === "teaching" ? (
           <div className="recommend-strip">
-            <span>本巡可优先观察</span>
+            <span>本巡教学提示</span>
             <div>
               {evaluations.slice(0, 3).map((item, index) => (
                 <strong key={item.tile.id}>
@@ -1581,10 +1669,12 @@ function DrawFeedbackPanel({
             </div>
           </div>
         ) : null}
-        <div className="review-section">
-          <span className="section-kicker">当前 16 张底牌听口</span>
-          <MiniTileList tiles={session.waitingTiles} emptyText="还没形成直接听口" />
-        </div>
+        {hintLevel === "teaching" ? (
+          <div className="review-section">
+            <span className="section-kicker">当前 16 张底牌听口</span>
+            <MiniTileList tiles={session.waitingTiles} emptyText="还没形成直接听口" />
+          </div>
+        ) : null}
       </div>
     );
   }
@@ -1604,29 +1694,41 @@ function DrawFeedbackPanel({
         </div>
       </div>
 
-      <div className="review-grid">
-        <div className="review-section">
-          <span className="section-kicker">打出后的有效进张</span>
-          <MiniTileList tiles={answer.evaluation.winningDraws} emptyText="暂无直接听牌" />
-        </div>
-        <div className="review-section">
-          <span className="section-kicker">本巡推荐</span>
-          <div className="top-candidates">
-            {evaluations.slice(0, 3).map((item, index) => (
-              <div className={bestEvaluations.some((bestItem) => bestItem.tile.id === item.tile.id) ? "top-card best" : "top-card"} key={item.tile.id}>
-                <strong>
-                  {index + 1}. 打 {tileLabel(item.tile)}
-                </strong>
-                <span>
-                  听牌 {item.winningDraws.length} 种 · {item.winningDrawCopies} 张
-                </span>
-              </div>
-            ))}
+      {hintLevel === "teaching" ? (
+        <div className="review-grid">
+          <div className="review-section">
+            <span className="section-kicker">打出后的有效进张</span>
+            <MiniTileList tiles={answer.evaluation.winningDraws} emptyText="暂无直接听牌" />
+          </div>
+          <div className="review-section">
+            <span className="section-kicker">本巡推荐</span>
+            <div className="top-candidates">
+              {evaluations.slice(0, 3).map((item, index) => (
+                <div className={bestEvaluations.some((bestItem) => bestItem.tile.id === item.tile.id) ? "top-card best" : "top-card"} key={item.tile.id}>
+                  <strong>
+                    {index + 1}. 打 {tileLabel(item.tile)}
+                  </strong>
+                  <span>
+                    听牌 {item.winningDraws.length} 种 · {item.winningDrawCopies} 张
+                  </span>
+                </div>
+              ))}
+            </div>
           </div>
         </div>
-      </div>
+      ) : null}
 
-      {hintLevel !== "off" ? (
+      {hintLevel === "light" ? (
+        <div className="reason-list">
+          <p>
+            {answer.correct
+              ? "本巡方向对了：你选到的是较适合这手牌继续推进的弃牌。"
+              : `这巡还有更优选择。轻提示只点方向：推荐打 ${bestEvaluations.map((item) => tileLabel(item.tile)).join("、")}，先比较它能保留多少有效进张。`}
+          </p>
+          <p>自己的牌河：{formatRiver(session.river)}。</p>
+        </div>
+      ) : null}
+      {hintLevel === "teaching" ? (
         <div className="reason-list">
           {(answer.correct ? answer.evaluation.reasons : best?.reasons ?? answer.evaluation.reasons).map((reason) => (
             <p key={reason}>{reason}</p>
