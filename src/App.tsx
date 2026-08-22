@@ -533,15 +533,18 @@ export function App() {
       <section className="trainer-grid">
         <div className="table-zone">
           <div className="table-header">
-            <div>
+            <div className="table-gold">
               <span className="label">本局金牌</span>
               <strong className="gold-name">
                 {tileLabel(mode === "discard" ? exercise.gold : mode === "listening" ? listeningExercise.gold : drawSession.gold)}
               </strong>
             </div>
-            <button className="icon-button" type="button" onClick={nextExercise} aria-label="换一题">
-              <RefreshCcw size={18} />
-            </button>
+            {mode !== "listening" ? <HintControls hintLevel={hintLevel} setHintLevel={setHintLevel} compact /> : null}
+            <div className="table-actions">
+              <button className="icon-button" type="button" onClick={nextExercise} aria-label="换一题">
+                <RefreshCcw size={18} />
+              </button>
+            </div>
           </div>
 
           <div className="felt">
@@ -570,8 +573,7 @@ export function App() {
           </div>
 
           {mode === "discard" ? (
-            <div className="action-strip">
-              <HintControls hintLevel={hintLevel} setHintLevel={setHintLevel} />
+            <div className="action-strip confirm-only">
               <button
                 className="confirm-action"
                 type="button"
@@ -596,8 +598,6 @@ export function App() {
               session={drawSession}
               answer={drawAnswer}
               pendingTileId={pendingTileId}
-              hintLevel={hintLevel}
-              setHintLevel={setHintLevel}
               onConfirm={() => confirmDiscard()}
               onContinue={continueDrawRound}
               onClaimWin={claimWin}
@@ -1121,9 +1121,11 @@ function TileFace({ tile, isGold }: { tile: TileInstance; isGold: boolean }) {
 function HintControls({
   hintLevel,
   setHintLevel,
+  compact = false,
 }: {
   hintLevel: HintLevel;
   setHintLevel: (level: HintLevel) => void;
+  compact?: boolean;
 }) {
   const levels: Array<{ id: HintLevel; label: string }> = [
     { id: "off", label: "关闭" },
@@ -1132,7 +1134,7 @@ function HintControls({
   ];
 
   return (
-    <div className="hint-row">
+    <div className={`hint-row ${compact ? "compact" : ""}`}>
       <span>提示等级</span>
       <div className="segmented">
         {levels.map((level) => (
@@ -1183,8 +1185,6 @@ function DrawPlayPanel({
   session,
   answer,
   pendingTileId,
-  hintLevel,
-  setHintLevel,
   onConfirm,
   onContinue,
   onClaimWin,
@@ -1194,8 +1194,6 @@ function DrawPlayPanel({
   session: DrawSession;
   answer: AnswerState | null;
   pendingTileId: string | null;
-  hintLevel: HintLevel;
-  setHintLevel: (level: HintLevel) => void;
   onConfirm: () => void;
   onContinue: () => void;
   onClaimWin: () => void;
@@ -1208,7 +1206,6 @@ function DrawPlayPanel({
   return (
     <div className="draw-play-panel">
       <div className="action-strip draw-actions">
-        <HintControls hintLevel={hintLevel} setHintLevel={setHintLevel} />
         {session.won ? (
           <button className="confirm-action win-action" type="button" onClick={onClaimWin} disabled={winClaimed}>
             <Sparkles size={18} />
@@ -1656,7 +1653,7 @@ function FeedbackPanel({
       <div className="feedback-panel guide-panel">
         <div className="feedback-hero">
           <span className="feedback-icon">
-            <Target size={22} />
+            <span className="badge-symbol">打</span>
           </span>
           <div>
             <strong>选择弃牌</strong>
@@ -1706,7 +1703,7 @@ function FeedbackPanel({
     <div className={`feedback-panel answered review-panel ${answer.correct ? "correct" : "wrong"}`}>
       <div className="review-head">
         <span className="review-badge">
-          {answer.correct ? <Check size={20} /> : <X size={20} />}
+          <span className="badge-symbol">{answer.correct ? "对" : "错"}</span>
         </span>
         <div>
           <strong>{answer.correct ? "选择正确" : "这张不是最优"}</strong>
@@ -1715,6 +1712,9 @@ function FeedbackPanel({
             {answer.evaluation.winningDrawCopies} 张
           </span>
         </div>
+        <button className="review-next-action" type="button" onClick={onNext}>
+          下一题
+        </button>
       </div>
 
       {hintLevel === "teaching" ? (
@@ -1758,9 +1758,6 @@ function FeedbackPanel({
           {!answer.correct ? <p>推荐打：{recommended}</p> : null}
         </div>
       ) : null}
-      <button className="primary-action" type="button" onClick={onNext}>
-        下一题
-      </button>
     </div>
   );
 }
@@ -1787,7 +1784,7 @@ function DrawFeedbackPanel({
       <div className="feedback-panel answered review-panel correct">
         <div className="review-head">
           <span className="review-badge">
-            <Sparkles size={20} />
+            <span className="badge-symbol">胡</span>
           </span>
           <div>
             <strong>已经成胡形</strong>
@@ -1809,7 +1806,7 @@ function DrawFeedbackPanel({
       <div className="feedback-panel guide-panel">
         <div className="feedback-hero">
           <span className="feedback-icon">
-            <Sparkles size={22} />
+            <span className="badge-symbol">摸</span>
           </span>
           <div>
             <strong>摸打到胡</strong>
@@ -1855,7 +1852,7 @@ function DrawFeedbackPanel({
     <div className={`feedback-panel answered review-panel ${answer.correct ? "correct" : "wrong"}`}>
       <div className="review-head">
         <span className="review-badge">
-          {answer.correct ? <Check size={20} /> : <X size={20} />}
+          <span className="badge-symbol">{answer.correct ? "对" : "错"}</span>
         </span>
         <div>
           <strong>{answer.correct ? "本巡选择合理" : "这巡还有更优选择"}</strong>
@@ -1932,7 +1929,7 @@ function ListeningFeedbackPanel({
       <div className="feedback-panel guide-panel">
         <div className="feedback-hero">
           <span className="feedback-icon">
-            <Eye size={22} />
+            <span className="badge-symbol">听</span>
           </span>
           <div>
             <strong>听牌判断</strong>
@@ -1958,7 +1955,7 @@ function ListeningFeedbackPanel({
     <div className={`feedback-panel answered review-panel ${answer.correct ? "correct" : "wrong"}`}>
       <div className="review-head">
         <span className="review-badge">
-          {answer.correct ? <Check size={20} /> : <X size={20} />}
+          <span className="badge-symbol">{answer.correct ? "对" : "补"}</span>
         </span>
         <div>
           <strong>{answer.correct ? "听牌判断正确" : "听口还没找全"}</strong>
@@ -1966,6 +1963,9 @@ function ListeningFeedbackPanel({
             听牌 {waits.length} 种 · 共 {exercise.waitingCopies} 张
           </span>
         </div>
+        <button className="review-next-action" type="button" onClick={onNext}>
+          下一题
+        </button>
       </div>
 
       <div className="review-section">
@@ -1978,9 +1978,6 @@ function ListeningFeedbackPanel({
         {extra.length > 0 ? <p>多选：{extra.join("、")}</p> : null}
         {answer.correct ? <p>选择完整，下一题继续保持。</p> : null}
       </div>
-      <button className="primary-action" type="button" onClick={onNext}>
-        下一题
-      </button>
     </div>
   );
 }
