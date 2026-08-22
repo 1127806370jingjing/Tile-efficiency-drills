@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { allTileKinds, canWin, createExercise, evaluateDiscards } from "./fuzhou";
+import { allTileKinds, canWin, createExercise, createListeningExercise, evaluateDiscards, getWaitingTiles } from "./fuzhou";
 import type { Tile, TileInstance } from "./fuzhou";
 
 function tile(id: string): Tile {
@@ -130,5 +130,36 @@ describe("fuzhou rules", () => {
 
     expect(evaluations.length).toBeGreaterThan(1);
     expect(evaluations[0].score).toBeGreaterThanOrEqual(evaluations[evaluations.length - 1].score);
+  });
+
+  it("detects waiting tiles for a 16 tile hand", () => {
+    const gold = tile("wan-9");
+    const listeningHand = hand([
+      "wan-1",
+      "wan-2",
+      "wan-3",
+      "wan-4",
+      "wan-5",
+      "wan-6",
+      "tong-1",
+      "tong-2",
+      "tong-3",
+      "tong-7",
+      "tong-7",
+      "tong-7",
+      "tiao-2",
+      "tiao-3",
+      "tiao-4",
+      "tiao-8",
+    ]);
+
+    expect(getWaitingTiles(listeningHand, gold).map((item) => item.id)).toContain("tiao-8");
+  });
+
+  it("creates listening exercises with at least one wait", () => {
+    const exercise = createListeningExercise();
+
+    expect(exercise.hand).toHaveLength(16);
+    expect(exercise.waitingTiles.length).toBeGreaterThan(0);
   });
 });

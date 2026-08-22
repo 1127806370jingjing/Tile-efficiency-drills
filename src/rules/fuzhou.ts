@@ -36,6 +36,14 @@ export type Exercise = {
   specialPatterns: SpecialPattern[];
 };
 
+export type ListeningExercise = {
+  hand: TileInstance[];
+  gold: Tile;
+  waitingTiles: Tile[];
+  waitingCopies: number;
+  specialPatterns: SpecialPattern[];
+};
+
 const suits: Suit[] = ["wan", "tong", "tiao"];
 
 export const suitLabels: Record<Suit, string> = {
@@ -80,6 +88,36 @@ export function createExercise(): Exercise {
   }
 
   return exercise;
+}
+
+export function createListeningExercise(): ListeningExercise {
+  let exercise = dealListeningExercise();
+  let guard = 0;
+
+  while (exercise.waitingTiles.length === 0 && guard < 80) {
+    exercise = dealListeningExercise();
+    guard += 1;
+  }
+
+  return exercise;
+}
+
+function dealListeningExercise(): ListeningExercise {
+  const gold = randomItem(allTileKinds);
+  const wall = buildWall();
+  shuffle(wall);
+  const hand = sortHand(wall.slice(0, 16), gold);
+  const waitingTiles = getWaitingTiles(hand, gold);
+  const remainingCounts = getRemainingCounts(hand);
+  const waitingCopies = waitingTiles.reduce((sum, tile) => sum + (remainingCounts.get(tile.id) ?? 0), 0);
+
+  return {
+    hand,
+    gold,
+    waitingTiles,
+    waitingCopies,
+    specialPatterns: describeSpecialPatterns(hand, gold),
+  };
 }
 
 function dealExercise(): Exercise {
@@ -174,6 +212,15 @@ function getRemainingCounts(hand: TileInstance[]): Map<string, number> {
   const counts = new Map(allTileKinds.map((tile) => [tile.id, 4]));
   hand.forEach((tile) => counts.set(tile.id, Math.max(0, (counts.get(tile.id) ?? 0) - 1)));
   return counts;
+}
+
+export function getWaitingTiles(hand: TileInstance[], gold: Tile): Tile[] {
+  if (hand.length % 3 !== 1) return [];
+  const remainingWall = getRemainingCounts(hand);
+
+  return allTileKinds.filter(
+    (draw) => (remainingWall.get(draw.id) ?? 0) > 0 && canWin([...hand, toInstance(draw, "listen")], gold),
+  );
 }
 
 export function canWin(hand: TileInstance[], gold: Tile): boolean {

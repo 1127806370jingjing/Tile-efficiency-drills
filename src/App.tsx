@@ -1,13 +1,16 @@
-import { Award, BookOpen, Bot, Eye, Loader2, Menu, RefreshCcw, Send, Sparkles, Target, X } from "lucide-react";
+import { Award, BookOpen, Bot, Check, Eye, Loader2, Menu, RefreshCcw, Search, Send, Sparkles, Target, X } from "lucide-react";
 import { type DragEvent, useEffect, useMemo, useState } from "react";
 import {
   type DiscardEvaluation,
   type Exercise,
   type HintLevel,
+  type ListeningExercise,
   type Suit,
   type Tile,
   type TileInstance,
+  allTileKinds,
   createExercise,
+  createListeningExercise,
   getBestEvaluations,
   getEvaluationForTile,
   tileLabel,
@@ -18,6 +21,13 @@ type AnswerState = {
   correct: boolean;
   evaluation: DiscardEvaluation;
 };
+
+type ListeningAnswer = {
+  selectedIds: string[];
+  correct: boolean;
+};
+
+type PracticeMode = "discard" | "listening";
 
 type Stats = {
   total: number;
@@ -84,8 +94,13 @@ function loadStats(): Stats {
 }
 
 export function App() {
+  const [mode, setMode] = useState<PracticeMode>("discard");
   const [exercise, setExercise] = useState<Exercise>(() => createExercise());
+  const [listeningExercise, setListeningExercise] = useState<ListeningExercise>(() => createListeningExercise());
   const [answer, setAnswer] = useState<AnswerState | null>(null);
+  const [pendingTileId, setPendingTileId] = useState<string | null>(null);
+  const [listeningAnswer, setListeningAnswer] = useState<ListeningAnswer | null>(null);
+  const [selectedWaitIds, setSelectedWaitIds] = useState<string[]>([]);
   const [hintLevel, setHintLevel] = useState<HintLevel>("teaching");
   const [stats, setStats] = useState<Stats>(() => loadStats());
   const [handRows, setHandRows] = useState<HandRow[]>(() => buildHandRows(exercise.hand));
@@ -105,34 +120,98 @@ export function App() {
   }, [stats]);
 
   useEffect(() => {
-    setHandRows(buildHandRows(exercise.hand));
-  }, [exercise]);
+    setHandRows(buildHandRows(mode === "discard" ? exercise.hand : listeningExercise.hand));
+  }, [exercise, listeningExercise, mode]);
 
   const bestEvaluations = useMemo(() => getBestEvaluations(exercise), [exercise]);
+  const activeHand = mode === "discard" ? exercise.hand : listeningExercise.hand;
   const tilesByInstance = useMemo(
-    () => new Map(exercise.hand.map((tile) => [tile.instanceId, tile])),
-    [exercise.hand],
+    () => new Map(activeHand.map((tile) => [tile.instanceId, tile])),
+    [activeHand],
   );
 
   function nextExercise() {
-    setExercise(createExercise());
+    if (mode === "discard") {
+      setExercise(createExercise());
+    } else {
+      setListeningExercise(createListeningExercise());
+      setSelectedWaitIds([]);
+      setListeningAnswer(null);
+    }
     setAnswer(null);
+    setPendingTileId(null);
     setCoachMessages([
       {
         id: crypto.randomUUID(),
         role: "assistant",
-        text: "新题已刷新。可以先自己判断，再问我这手牌的牌效。",
+        text: mode === "discard" ? "新题已刷新。先点选要打的牌，再确认提交。" : "听牌题已刷新。请选择你认为能胡的进张，再确认答案。",
       },
     ]);
   }
 
   function chooseTile(tile: TileInstance) {
     if (answer) return;
+    if (pendingTileId !== tile.id) {
+      setPendingTileId(tile.id);
+      return;
+    }
+    confirmDiscard(tile.id);
+  }
+
+  function confirmDiscard(tileId = pendingTileId) {
+    if (!tileId || answer) return;
+    const tile = exercise.hand.find((item) => item.id === tileId);
+    if (!tile) return;
     const evaluation = getEvaluationForTile(exercise, tile.id);
     if (!evaluation) return;
 
     const correct = exercise.bestDiscardIds.includes(tile.id);
     setAnswer({ tileId: tile.id, correct, evaluation });
+    setStats((current) => {
+      const streak = correct ? current.streak + 1 : 0;
+      return {
+        ...current,
+        total: current.total + 1,
+        correct: current.correct + (correct ? 1 : 0),
+        streak,
+        bestStreak: Math.max(current.bestStreak, streak),
+        today: current.today + 1,
+      };
+    });
+  }
+
+  function switchMode(nextMode: PracticeMode) {
+    setMode(nextMode);
+    setModeOpen(false);
+    setAnswer(null);
+    setPendingTileId(null);
+    setListeningAnswer(null);
+    setSelectedWaitIds([]);
+    setCoachMessages([
+      {
+        id: crypto.randomUUID(),
+        role: "assistant",
+        text:
+          nextMode === "discard"
+            ? "已切换到弃牌练习。先点选一张牌，再确认打出。"
+            : "已切换到听牌练习。选出所有能让这手牌胡牌的进张。",
+      },
+    ]);
+  }
+
+  function toggleWait(tileId: string) {
+    if (listeningAnswer) return;
+    setSelectedWaitIds((current) =>
+      current.includes(tileId) ? current.filter((id) => id !== tileId) : [...current, tileId],
+    );
+  }
+
+  function confirmListening() {
+    if (listeningAnswer) return;
+    const selected = [...selectedWaitIds].sort();
+    const expected = listeningExercise.waitingTiles.map((tile) => tile.id).sort();
+    const correct = selected.length === expected.length && selected.every((id, index) => id === expected[index]);
+    setListeningAnswer({ selectedIds: selectedWaitIds, correct });
     setStats((current) => {
       const streak = correct ? current.streak + 1 : 0;
       return {
@@ -170,7 +249,9 @@ export function App() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(buildCoachPayload(exercise, answer, trimmedQuestion)),
+        body: JSON.stringify(
+          buildCoachPayload(exercise, answer, trimmedQuestion, mode, listeningExercise, listeningAnswer),
+        ),
       });
 
       const data = (await response.json()) as { answer?: string; model?: string; usage?: TokenUsage | null };
@@ -192,7 +273,9 @@ export function App() {
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          text: cleanCoachText(data.answer) || buildLocalCoachReply(exercise, answer, trimmedQuestion),
+          text:
+            cleanCoachText(data.answer) ||
+            buildLocalCoachReply(exercise, answer, trimmedQuestion, mode, listeningExercise),
           usage: data.usage ?? undefined,
           model: data.model,
         },
@@ -203,7 +286,7 @@ export function App() {
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          text: buildLocalCoachReply(exercise, answer, trimmedQuestion),
+          text: buildLocalCoachReply(exercise, answer, trimmedQuestion, mode, listeningExercise),
           model: "本地规则引擎 · DeepSeek",
         },
       ]);
@@ -214,7 +297,12 @@ export function App() {
 
   return (
     <main className="app-shell">
-      <ModeDock open={modeOpen} onToggle={() => setModeOpen((value) => !value)} />
+      <ModeDock
+        mode={mode}
+        open={modeOpen}
+        onToggle={() => setModeOpen((value) => !value)}
+        onModeChange={switchMode}
+      />
       <section className="hero-panel">
         <div className="brand-block">
           <div className="brand-mark">福</div>
@@ -230,7 +318,9 @@ export function App() {
           <div className="table-header">
             <div>
               <span className="label">本局金牌</span>
-              <strong className="gold-name">{tileLabel(exercise.gold)}</strong>
+              <strong className="gold-name">
+                {tileLabel(mode === "discard" ? exercise.gold : listeningExercise.gold)}
+              </strong>
             </div>
             <button className="icon-button" type="button" onClick={nextExercise} aria-label="换一题">
               <RefreshCcw size={18} />
@@ -240,20 +330,45 @@ export function App() {
           <div className="felt">
             <div className="rule-note">
               <BookOpen size={18} />
-              不计分、不算花，先练福州麻将新手最关键的弃牌牌效。
+              {mode === "discard"
+                ? "先点选要打的牌，再确认提交，避免误触。"
+                : "请选择所有摸到即可胡的牌，练听口识别。"}
             </div>
             <TileRack
               rows={handRows}
               tilesByInstance={tilesByInstance}
-              gold={exercise.gold}
+              gold={mode === "discard" ? exercise.gold : listeningExercise.gold}
               selectedId={answer?.tileId}
+              pendingId={pendingTileId}
               disabled={Boolean(answer)}
-              onChoose={chooseTile}
+              onChoose={mode === "discard" ? chooseTile : undefined}
               onMoveGold={setHandRows}
             />
           </div>
 
-          <HintControls hintLevel={hintLevel} setHintLevel={setHintLevel} />
+          {mode === "discard" ? (
+            <div className="action-strip">
+              <HintControls hintLevel={hintLevel} setHintLevel={setHintLevel} />
+              <button
+                className="confirm-action"
+                type="button"
+                onClick={() => confirmDiscard()}
+                disabled={!pendingTileId || Boolean(answer)}
+              >
+                <Check size={18} />
+                确认打出{pendingTileId ? tileLabel(exercise.hand.find((tile) => tile.id === pendingTileId)!) : ""}
+              </button>
+            </div>
+          ) : (
+            <ListeningPanel
+              exercise={listeningExercise}
+              selectedWaitIds={selectedWaitIds}
+              answer={listeningAnswer}
+              onToggleWait={toggleWait}
+              onConfirm={confirmListening}
+              onNext={nextExercise}
+            />
+          )}
         </div>
 
         <aside className="side-panel">
@@ -263,23 +378,39 @@ export function App() {
             question={coachQuestion}
             loading={coachLoading}
             answer={answer}
+            mode={mode}
             onQuestionChange={setCoachQuestion}
             onAsk={askCoach}
           />
-          <FeedbackPanel
-            answer={answer}
-            exercise={exercise}
-            bestEvaluations={bestEvaluations}
-            hintLevel={hintLevel}
-            onNext={nextExercise}
-          />
+          {mode === "discard" ? (
+            <FeedbackPanel
+              answer={answer}
+              pendingTileId={pendingTileId}
+              exercise={exercise}
+              bestEvaluations={bestEvaluations}
+              hintLevel={hintLevel}
+              onNext={nextExercise}
+            />
+          ) : (
+            <ListeningFeedbackPanel exercise={listeningExercise} answer={listeningAnswer} onNext={nextExercise} />
+          )}
         </aside>
       </section>
     </main>
   );
 }
 
-function ModeDock({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+function ModeDock({
+  mode,
+  open,
+  onToggle,
+  onModeChange,
+}: {
+  mode: PracticeMode;
+  open: boolean;
+  onToggle: () => void;
+  onModeChange: (mode: PracticeMode) => void;
+}) {
   return (
     <nav className={`mode-dock ${open ? "open" : ""}`} aria-label="练习模式">
       <button className="mode-tab" type="button" onClick={onToggle} aria-expanded={open} aria-label="切换练习模式">
@@ -287,11 +418,19 @@ function ModeDock({ open, onToggle }: { open: boolean; onToggle: () => void }) {
         <span>模式</span>
       </button>
       <div className="mode-drawer">
-        <button className="mode-button active" type="button">
+        <button
+          className={`mode-button ${mode === "discard" ? "active" : ""}`}
+          type="button"
+          onClick={() => onModeChange("discard")}
+        >
           <Target size={18} />
           弃牌练习
         </button>
-        <button className="mode-button locked" type="button" disabled>
+        <button
+          className={`mode-button ${mode === "listening" ? "active" : ""}`}
+          type="button"
+          onClick={() => onModeChange("listening")}
+        >
           <Eye size={18} />
           听牌练习
         </button>
@@ -308,14 +447,18 @@ function buildCoachPayload(
   exercise: Exercise,
   answer: AnswerState | null,
   question: string,
+  mode: PracticeMode,
+  listeningExercise: ListeningExercise,
+  listeningAnswer: ListeningAnswer | null,
 ) {
   const bestEvaluations = getBestEvaluations(exercise);
 
   return {
     question,
+    mode: mode === "discard" ? "弃牌练习" : "听牌练习",
     ruleset: "福州麻将新手教学版；不计分、不算花；金牌按万能牌理解。",
-    gold: tileLabel(exercise.gold),
-    hand: exercise.hand.map((tile) => tileLabel(tile)),
+    gold: tileLabel(mode === "discard" ? exercise.gold : listeningExercise.gold),
+    hand: (mode === "discard" ? exercise.hand : listeningExercise.hand).map((tile) => tileLabel(tile)),
     selectedDiscard: answer
       ? {
           tile: tileLabel(answer.evaluation.tile),
@@ -325,7 +468,15 @@ function buildCoachPayload(
       : null,
     recommendedDiscards: bestEvaluations.map(summarizeEvaluation),
     topCandidates: exercise.evaluations.slice(0, 6).map(summarizeEvaluation),
-    specialPatterns: exercise.specialPatterns,
+    listening:
+      mode === "listening"
+        ? {
+            selected: listeningAnswer?.selectedIds.map((id) => tileLabel(allTileKinds.find((tile) => tile.id === id)!)) ?? [],
+            correctWaits: listeningExercise.waitingTiles.map((tile) => tileLabel(tile)),
+            waitingCopies: listeningExercise.waitingCopies,
+          }
+        : null,
+    specialPatterns: mode === "discard" ? exercise.specialPatterns : listeningExercise.specialPatterns,
   };
 }
 
@@ -340,7 +491,22 @@ function summarizeEvaluation(evaluation: DiscardEvaluation) {
   };
 }
 
-function buildLocalCoachReply(exercise: Exercise, answer: AnswerState | null, question: string): string {
+function buildLocalCoachReply(
+  exercise: Exercise,
+  answer: AnswerState | null,
+  question: string,
+  mode: PracticeMode,
+  listeningExercise: ListeningExercise,
+): string {
+  if (mode === "listening") {
+    const waits = listeningExercise.waitingTiles.map((tile) => tileLabel(tile)).join("、");
+    return [
+      "目前本地预览没有连接 Cloudflare 后端，我先用规则引擎给你一个简版解释。",
+      `这手牌现在听：${waits}，合计 ${listeningExercise.waitingCopies} 张剩余机会。`,
+      `本局金牌是 ${tileLabel(listeningExercise.gold)}，金牌能补面子或雀头，所以听口判断要把它当万能牌一起看。`,
+    ].join("\n\n");
+  }
+
   const best = getBestEvaluations(exercise)[0];
   const selected = answer?.evaluation;
   const target = selected ?? best;
@@ -404,6 +570,7 @@ function TileRack({
   tilesByInstance,
   gold,
   selectedId,
+  pendingId,
   disabled,
   onChoose,
   onMoveGold,
@@ -412,8 +579,9 @@ function TileRack({
   tilesByInstance: Map<string, TileInstance>;
   gold: Tile;
   selectedId?: string;
+  pendingId?: string | null;
   disabled: boolean;
-  onChoose: (tile: TileInstance) => void;
+  onChoose?: (tile: TileInstance) => void;
   onMoveGold: (rows: HandRow[] | ((rows: HandRow[]) => HandRow[])) => void;
 }) {
   const [draggingId, setDraggingId] = useState<string | null>(null);
@@ -448,12 +616,12 @@ function TileRack({
                 <button
                   className={`mahjong-tile ${tile.suit} ${isGold ? "gold" : ""} ${
                     selectedId === tile.id ? "selected" : ""
-                  } ${draggingId === tile.instanceId ? "dragging" : ""}`}
+                  } ${pendingId === tile.id ? "pending" : ""} ${draggingId === tile.instanceId ? "dragging" : ""}`}
                   key={tile.instanceId}
                   type="button"
-                  disabled={disabled}
+                  disabled={disabled || !onChoose}
                   draggable={isGold && !disabled}
-                  onClick={() => onChoose(tile)}
+                  onClick={() => onChoose?.(tile)}
                   onDragStart={(event) => {
                     if (!isGold) return;
                     setDraggingId(tile.instanceId);
@@ -568,11 +736,73 @@ function StatsPanel({ stats }: { stats: Stats }) {
   );
 }
 
+function ListeningPanel({
+  exercise,
+  selectedWaitIds,
+  answer,
+  onToggleWait,
+  onConfirm,
+  onNext,
+}: {
+  exercise: ListeningExercise;
+  selectedWaitIds: string[];
+  answer: ListeningAnswer | null;
+  onToggleWait: (tileId: string) => void;
+  onConfirm: () => void;
+  onNext: () => void;
+}) {
+  const waitingIds = new Set(exercise.waitingTiles.map((tile) => tile.id));
+
+  return (
+    <div className="listening-panel">
+      <div className="panel-title">
+        <Search size={18} />
+        选择所有听牌
+      </div>
+      <p className="body-copy">点选你认为摸到即可胡的牌，可以多选；提交后会显示正确听口。</p>
+      <div className="wait-grid" aria-label="听牌候选">
+        {allTileKinds.map((tile) => {
+          const selected = selectedWaitIds.includes(tile.id);
+          const revealed = Boolean(answer);
+          const correct = waitingIds.has(tile.id);
+          return (
+            <button
+              className={`wait-tile ${tile.suit} ${selected ? "selected" : ""} ${revealed && correct ? "correct" : ""} ${
+                revealed && selected && !correct ? "wrong" : ""
+              }`}
+              key={tile.id}
+              type="button"
+              onClick={() => onToggleWait(tile.id)}
+              disabled={revealed}
+              aria-pressed={selected}
+            >
+              <TileFace tile={{ ...tile, instanceId: tile.id }} isGold={tile.id === exercise.gold.id} />
+              {tile.id === exercise.gold.id ? <span className="gold-chip">金</span> : null}
+            </button>
+          );
+        })}
+      </div>
+      <div className="listen-actions">
+        <button className="confirm-action" type="button" onClick={onConfirm} disabled={Boolean(answer)}>
+          <Check size={18} />
+          确认听牌
+        </button>
+        {answer ? (
+          <button className="soft-action" type="button" onClick={onNext}>
+            下一题
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function CoachPanel({
   messages,
   question,
   loading,
   answer,
+  mode,
   onQuestionChange,
   onAsk,
 }: {
@@ -580,12 +810,16 @@ function CoachPanel({
   question: string;
   loading: boolean;
   answer: AnswerState | null;
+  mode: PracticeMode;
   onQuestionChange: (question: string) => void;
   onAsk: (question: string) => void;
 }) {
-  const quickQuestions = answer
-    ? ["我这张打得怎么样？", "为什么推荐打那张？", "用新手话讲一遍"]
-    : ["这手牌先看哪里？", "为什么这些牌牌效低？", "金牌现在怎么用？"];
+  const quickQuestions =
+    mode === "listening"
+      ? ["这手牌听什么？", "为什么这些牌能胡？", "我漏看了哪里？"]
+      : answer
+        ? ["我这张打得怎么样？", "为什么推荐打那张？", "用新手话讲一遍"]
+        : ["这手牌先看哪里？", "为什么这些牌牌效低？", "金牌现在怎么用？"];
 
   return (
     <div className="coach-panel">
@@ -624,7 +858,7 @@ function CoachPanel({
         <input
           value={question}
           onChange={(event) => onQuestionChange(event.target.value)}
-          placeholder="问：为什么这张牌效最低？"
+          placeholder={mode === "listening" ? "问：这手牌听哪些牌？" : "问：为什么这张牌效最低？"}
           disabled={loading}
         />
         <button type="submit" aria-label="发送问题" disabled={loading || !question.trim()}>
@@ -655,12 +889,14 @@ function Metric({ label, value }: { label: string; value: string | number }) {
 
 function FeedbackPanel({
   answer,
+  pendingTileId,
   exercise,
   bestEvaluations,
   hintLevel,
   onNext,
 }: {
   answer: AnswerState | null;
+  pendingTileId: string | null;
   exercise: Exercise;
   bestEvaluations: DiscardEvaluation[];
   hintLevel: HintLevel;
@@ -676,6 +912,11 @@ function FeedbackPanel({
           选择你要打掉的牌
         </div>
         <p className="body-copy">目标是找出打掉后牌形保留最好、有效进张最多的牌。</p>
+        {pendingTileId ? (
+          <div className="pending-card">
+            已选中 <strong>{tileLabel(exercise.hand.find((tile) => tile.id === pendingTileId)!)}</strong>，再次点击同一张牌或点确认按钮提交。
+          </div>
+        ) : null}
         {exercise.specialPatterns.length > 0 ? (
           <div className="special-list">
             {exercise.specialPatterns.map((pattern) => (
@@ -711,6 +952,63 @@ function FeedbackPanel({
       {!answer.correct ? (
         <EvaluationDetail evaluation={bestEvaluations[0]} hintLevel="teaching" title="推荐弃牌说明" />
       ) : null}
+      <button className="primary-action" type="button" onClick={onNext}>
+        下一题
+      </button>
+    </div>
+  );
+}
+
+function ListeningFeedbackPanel({
+  exercise,
+  answer,
+  onNext,
+}: {
+  exercise: ListeningExercise;
+  answer: ListeningAnswer | null;
+  onNext: () => void;
+}) {
+  const waits = exercise.waitingTiles.map((tile) => tileLabel(tile));
+  const selectedLabels = answer?.selectedIds.map((id) => tileLabel(allTileKinds.find((tile) => tile.id === id)!)) ?? [];
+  const missed = waits.filter((label) => !selectedLabels.includes(label));
+  const extra = selectedLabels.filter((label) => !waits.includes(label));
+
+  if (!answer) {
+    return (
+      <div className="feedback-panel">
+        <div className="panel-title">
+          <Eye size={18} />
+          听牌判断
+        </div>
+        <p className="body-copy">这是一副 16 张手牌。请选择所有“摸到即可胡”的牌。</p>
+        {exercise.specialPatterns.length > 0 ? (
+          <div className="special-list">
+            {exercise.specialPatterns.map((pattern) => (
+              <div key={pattern.name}>
+                <strong>{pattern.name}</strong>
+                <span>{pattern.description}</span>
+              </div>
+            ))}
+          </div>
+        ) : null}
+      </div>
+    );
+  }
+
+  return (
+    <div className={`feedback-panel answered ${answer.correct ? "correct" : "wrong"}`}>
+      <div className="result-line">
+        <span>{answer.correct ? "听牌判断正确" : "听口还没找全"}</span>
+        <strong>{answer.correct ? "+1" : "复盘"}</strong>
+      </div>
+      <div className="explain-block">
+        <span>正确听牌</span>
+        <p>
+          <strong>{waits.join("、")}</strong>，合计 {exercise.waitingCopies} 张剩余机会。
+        </p>
+        {missed.length > 0 ? <p>漏选：{missed.join("、")}</p> : null}
+        {extra.length > 0 ? <p>多选：{extra.join("、")}</p> : null}
+      </div>
       <button className="primary-action" type="button" onClick={onNext}>
         下一题
       </button>
