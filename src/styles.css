@@ -2254,6 +2254,17 @@ h1 {
   }
 }
 
+@keyframes rewardPulse {
+  from {
+    box-shadow: 0 0 0 rgba(228, 199, 111, 0);
+    transform: translateY(0);
+  }
+  to {
+    box-shadow: 0 10px 26px rgba(228, 199, 111, 0.16);
+    transform: translateY(-1px);
+  }
+}
+
 .suit-row-tiles::-webkit-scrollbar {
   display: none;
 }
