@@ -184,11 +184,20 @@ export function App() {
         body: JSON.stringify(buildCoachPayload(exercise, answer, trimmedQuestion, coachProvider)),
       });
 
+      const data = (await response.json()) as { answer?: string; model?: string; usage?: TokenUsage | null };
       if (!response.ok) {
-        throw new Error(`coach api ${response.status}`);
+        setCoachMessages((current) => [
+          ...current,
+          {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            text: data.answer?.trim() || `AI 教练接口暂时不可用，错误码：${response.status}`,
+            model: `${getProviderLabel(coachProvider)} 配置检查`,
+          },
+        ]);
+        return;
       }
 
-      const data = (await response.json()) as { answer?: string; model?: string; usage?: TokenUsage | null };
       setCoachMessages((current) => [
         ...current,
         {
