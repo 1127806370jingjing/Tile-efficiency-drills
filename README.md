@@ -19,9 +19,12 @@ npm run dev
 
 上线后在 Cloudflare Pages 项目里添加环境变量：
 
-- `OPENAI_API_KEY`: OpenAI API Key，必须设置为 Secret
+- `OPENAI_API_KEY`: Codex / OpenAI 使用的 API Key，必须设置为 Secret
 - `OPENAI_MODEL`: 可选，默认 `gpt-4.1-mini`
 - `OPENAI_MAX_OUTPUT_TOKENS`: 可选，默认 `500`
+- `DEEPSEEK_API_KEY`: DeepSeek 使用的 API Key，必须设置为 Secret
+- `DEEPSEEK_MODEL`: 可选，默认 `deepseek-chat`
+- `DEEPSEEK_MAX_OUTPUT_TOKENS`: 可选，默认 `500`
 
 AI 教练接口为：
 
@@ -29,9 +32,9 @@ AI 教练接口为：
 POST /api/coach
 ```
 
-前端会把当前手牌、本局金牌、推荐弃牌、用户选择和问题发给这个接口。OpenAI API Key 只保存在 Cloudflare 后端环境变量中，不会暴露到浏览器。
+前端会把当前手牌、本局金牌、推荐弃牌、用户选择和问题发给这个接口。API Key 只保存在 Cloudflare 后端环境变量中，不会暴露到浏览器。AI 教练面板可以在 Codex / OpenAI 和 DeepSeek 之间切换。
 
-每次 AI 回复会显示本次 token 用量，包括输入、输出和总 token。你也可以在 OpenAI 后台按指定 API Key 查看总体消耗。
+每次 AI 回复会显示本次 token 用量，包括输入、输出和总 token。你也可以在对应平台后台按指定 API Key 查看总体消耗。
 
 ## 访问保护
 

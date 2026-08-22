@@ -47,7 +47,10 @@ type TokenUsage = {
   totalTokens: number;
 };
 
+type CoachProvider = "openai" | "deepseek";
+
 const statsKey = "fuzhou-mahjong-trainer-stats";
+const providerStorageKey = "fuzhou-mahjong-coach-provider";
 const suitOrder: Suit[] = ["wan", "tong", "tiao"];
 const suitNames: Record<Suit, string> = {
   wan: "万",
@@ -55,6 +58,10 @@ const suitNames: Record<Suit, string> = {
   tiao: "条",
 };
 const chineseRanks = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+const coachProviders: Array<{ id: CoachProvider; label: string }> = [
+  { id: "openai", label: "Codex / OpenAI" },
+  { id: "deepseek", label: "DeepSeek" },
+];
 
 function getDateKey(): string {
   return new Date().toISOString().slice(0, 10);
@@ -98,6 +105,7 @@ export function App() {
   ]);
   const [coachQuestion, setCoachQuestion] = useState("");
   const [coachLoading, setCoachLoading] = useState(false);
+  const [coachProvider, setCoachProvider] = useState<CoachProvider>(() => loadCoachProvider());
 
   useEffect(() => {
     localStorage.setItem(statsKey, JSON.stringify(stats));
@@ -106,6 +114,10 @@ export function App() {
   useEffect(() => {
     setHandRows(buildHandRows(exercise.hand));
   }, [exercise]);
+
+  useEffect(() => {
+    localStorage.setItem(providerStorageKey, coachProvider);
+  }, [coachProvider]);
 
   const bestEvaluations = useMemo(() => getBestEvaluations(exercise), [exercise]);
   const tilesByInstance = useMemo(
@@ -169,7 +181,7 @@ export function App() {
         headers: {
           "Content-Type": "application/json",
         },
-        body: JSON.stringify(buildCoachPayload(exercise, answer, trimmedQuestion)),
+        body: JSON.stringify(buildCoachPayload(exercise, answer, trimmedQuestion, coachProvider)),
       });
 
       if (!response.ok) {
@@ -194,7 +206,7 @@ export function App() {
           id: crypto.randomUUID(),
           role: "assistant",
           text: buildLocalCoachReply(exercise, answer, trimmedQuestion),
-          model: "本地规则引擎",
+          model: `本地规则引擎 · ${getProviderLabel(coachProvider)}`,
         },
       ]);
     } finally {
@@ -265,8 +277,10 @@ export function App() {
             messages={coachMessages}
             question={coachQuestion}
             loading={coachLoading}
+            provider={coachProvider}
             answer={answer}
             onQuestionChange={setCoachQuestion}
+            onProviderChange={setCoachProvider}
             onAsk={askCoach}
           />
           <FeedbackPanel
@@ -282,10 +296,25 @@ export function App() {
   );
 }
 
-function buildCoachPayload(exercise: Exercise, answer: AnswerState | null, question: string) {
+function loadCoachProvider(): CoachProvider {
+  const saved = localStorage.getItem(providerStorageKey);
+  return saved === "deepseek" ? "deepseek" : "openai";
+}
+
+function getProviderLabel(provider: CoachProvider): string {
+  return coachProviders.find((item) => item.id === provider)?.label ?? "Codex / OpenAI";
+}
+
+function buildCoachPayload(
+  exercise: Exercise,
+  answer: AnswerState | null,
+  question: string,
+  provider: CoachProvider,
+) {
   const bestEvaluations = getBestEvaluations(exercise);
 
   return {
+    provider,
     question,
     ruleset: "福州麻将新手教学版；不计分、不算花；金牌按万能牌理解。",
     gold: tileLabel(exercise.gold),
@@ -533,15 +562,19 @@ function CoachPanel({
   messages,
   question,
   loading,
+  provider,
   answer,
   onQuestionChange,
+  onProviderChange,
   onAsk,
 }: {
   messages: CoachMessage[];
   question: string;
   loading: boolean;
+  provider: CoachProvider;
   answer: AnswerState | null;
   onQuestionChange: (question: string) => void;
+  onProviderChange: (provider: CoachProvider) => void;
   onAsk: (question: string) => void;
 }) {
   const quickQuestions = answer
@@ -553,6 +586,21 @@ function CoachPanel({
       <div className="panel-title">
         <Bot size={18} />
         AI 教练
+      </div>
+      <div className="provider-row">
+        <span>服务商</span>
+        <select
+          value={provider}
+          onChange={(event) => onProviderChange(event.target.value as CoachProvider)}
+          disabled={loading}
+          aria-label="选择 AI 服务商"
+        >
+          {coachProviders.map((item) => (
+            <option key={item.id} value={item.id}>
+              {item.label}
+            </option>
+          ))}
+        </select>
       </div>
       <div className="coach-messages" aria-live="polite">
         {messages.map((message) => (
