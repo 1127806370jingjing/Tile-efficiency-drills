@@ -180,7 +180,7 @@ export function App() {
           {
             id: crypto.randomUUID(),
             role: "assistant",
-            text: cleanCoachText(data.answer) || `AI 教练接口暂时不可用，错误码：${response.status}`,
+            text: cleanCoachText(data.answer) || `牌效解析暂时不可用，错误码：${response.status}`,
             model: "DeepSeek 配置检查",
           },
         ]);

@@ -33,7 +33,7 @@ export async function onRequestPost(context) {
 }
 
 export async function onRequestGet() {
-  return json({ ok: true, message: "AI 教练接口已启用，请使用 POST 提问。" });
+  return json({ ok: true, message: "牌效解析接口已启用，请使用 POST 提问。" });
 }
 
 async function callDeepSeek(config, payload) {
