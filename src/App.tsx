@@ -179,7 +179,7 @@ export function App() {
     {
       id: crypto.randomUUID(),
       role: "assistant",
-      text: "这里是牌效解析。你可以问：为什么推荐打这张、我刚才打得怎么样、这手牌怎么拆。",
+      text: "我是流萤。把手牌交给我看吧，我会帮你找出最稳的那一步。才、才不是特意陪你练牌哦。",
     },
   ]);
   const [coachQuestion, setCoachQuestion] = useState("");
@@ -261,10 +261,10 @@ export function App() {
         role: "assistant",
         text:
           mode === "discard"
-            ? "新题已刷新。点选要打的牌，再点同一张牌即可打出。"
+            ? "新题已刷新。先看孤张和搭子，再点同一张牌打出。别急，我会盯着你的选择。"
             : mode === "listening"
-              ? "听牌题已刷新。请选择你认为能胡的进张，再确认答案。"
-              : "新的摸打局已开始。摸牌后先判断能不能胡，再点同一张牌完成打出。",
+              ? "听牌题已刷新。把能胡的进张都找出来，漏看了我也会提醒你。"
+              : "新的摸打局已开始。先判断能不能胡，再决定打哪张。别得意，每一巡都要认真。",
       },
     ]);
   }
@@ -906,9 +906,10 @@ function buildLocalCoachReply(
   if (mode === "listening") {
     const waits = listeningExercise.waitingTiles.map((tile) => tileLabel(tile)).join("、");
     return [
-      "目前本地预览没有连接 Cloudflare 后端，我先用规则引擎给你一个简版解释。",
+      "流萤先用本地规则引擎给你看一版，正式 AI 到线上会更会说一点。",
       `这手牌现在听：${waits}，合计 ${listeningExercise.waitingCopies} 张剩余机会。`,
       `本局金牌是 ${tileLabel(listeningExercise.gold)}，金牌能补面子或雀头，所以听口判断要把它当万能牌一起看。`,
+      "别漏看了。才不是担心你，只是这题很适合练眼力。",
     ].join("\n\n");
   }
 
@@ -918,7 +919,7 @@ function buildLocalCoachReply(
     const best = drawEvaluations.filter((item) => item.score >= bestScore - 0.01)[0];
     const selected = drawAnswer?.evaluation;
     const target = selected ?? best;
-    const apiHint = "目前本地预览没有连接 Cloudflare 后端，我先用规则引擎给你一个简版解释。";
+    const apiHint = "流萤先用本地规则引擎给你看一版，正式 AI 到线上会更会说一点。";
 
     if (drawSession.won) {
       return [
@@ -948,7 +949,7 @@ function buildLocalCoachReply(
   const selected = answer?.evaluation;
   const target = selected ?? best;
   const prefix = question.includes("我") && selected ? `你刚才打 ${tileLabel(selected.tile)}。` : "";
-  const apiHint = "目前本地预览没有连接 Cloudflare 后端，我先用规则引擎给你一个简版解释。";
+  const apiHint = "流萤先用本地规则引擎给你看一版，正式 AI 到线上会更会说一点。";
 
   return [
     apiHint,
@@ -957,6 +958,7 @@ function buildLocalCoachReply(
     exercise.gold.id === target.tile.id
       ? "注意：这张是金牌，金通常是全手牌效最高的牌，不建议随便打。"
       : `本局金牌是 ${tileLabel(exercise.gold)}，判断时要优先考虑它能补顺、补刻或补雀头。`,
+    "这一步看懂就好，别得意，下题我还会继续检查。",
   ].join("\n\n");
 }
 
@@ -1371,7 +1373,7 @@ function CoachLauncher({
     >
       <span className={`pet-avatar ${loading ? "thinking" : "idle"}`} aria-hidden="true" />
       <span className="coach-launcher-copy">
-        <strong>牌效解析</strong>
+        <strong>流萤教练</strong>
         <span>{loading ? "正在思考" : `${Math.max(0, messageCount - 1)} 条对话`}</span>
       </span>
       <Bot size={18} />
@@ -1420,7 +1422,7 @@ function CoachDrawer({
           <div className="coach-title-block">
             <span className={`pet-avatar large ${loading ? "thinking" : "talking"}`} aria-hidden="true" />
             <div>
-              <span className="label">AI 助手</span>
+              <span className="label">流萤 AI 教练</span>
               <strong>牌效解析</strong>
             </div>
           </div>
@@ -1557,7 +1559,7 @@ function CoachPanel({
     <div className="coach-panel">
       <div className="panel-title">
         <Bot size={18} />
-        牌效解析
+        流萤的牌效解析
       </div>
       <div className="coach-messages" aria-live="polite">
         {messages.map((message) => (
@@ -1569,7 +1571,7 @@ function CoachPanel({
         {loading ? (
           <div className="coach-message assistant loading">
             <Loader2 size={16} />
-            正在分析这手牌
+            流萤正在分析这手牌
           </div>
         ) : null}
       </div>
