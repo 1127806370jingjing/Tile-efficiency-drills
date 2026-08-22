@@ -254,10 +254,10 @@ export function App() {
         role: "assistant",
         text:
           mode === "discard"
-            ? "新题已刷新。先点选要打的牌，再确认提交。"
+            ? "新题已刷新。点选要打的牌，再点同一张牌即可打出。"
             : mode === "listening"
               ? "听牌题已刷新。请选择你认为能胡的进张，再确认答案。"
-              : "新的摸打局已开始。摸牌后先判断能不能胡，再选择要打出的牌。",
+              : "新的摸打局已开始。摸牌后先判断能不能胡，再点同一张牌完成打出。",
       },
     ]);
   }
@@ -349,7 +349,7 @@ export function App() {
         role: "assistant",
         text:
           nextMode === "discard"
-            ? "已切换到弃牌练习。先点选一张牌，再确认打出。"
+            ? "已切换到弃牌练习。先点选一张牌，再点同一张牌打出。"
             : nextMode === "listening"
               ? "已切换到听牌练习。选出所有能让这手牌胡牌的进张。"
               : "已切换到摸打到胡。每轮摸一张、打一张，先从自己的牌河开始复盘。",
@@ -551,12 +551,12 @@ export function App() {
             <div className="rule-note">
               <BookOpen size={18} />
               {mode === "discard"
-                ? "先点选要打的牌，再确认提交，避免误触。"
+                ? "点选要打的牌，再点同一张牌打出；双击也可以。"
                 : mode === "listening"
                   ? "请选择所有摸到即可胡的牌，练听口识别。"
                   : drawSession.won
                     ? "这手牌已经成胡形，可以点击胡牌完成本局。"
-                    : "每轮摸一张、打一张；牌河先记录你自己的出牌。"}
+                    : "每轮摸一张、打一张；点同一张牌第二次即打出。"}
             </div>
             {mode === "draw" ? <DrawStatus session={drawSession} /> : null}
             <TileRack
@@ -572,19 +572,7 @@ export function App() {
             />
           </div>
 
-          {mode === "discard" ? (
-            <div className="action-strip confirm-only">
-              <button
-                className="confirm-action"
-                type="button"
-                onClick={() => confirmDiscard()}
-                disabled={!pendingTileId || Boolean(answer)}
-              >
-                <Check size={18} />
-                确认打出{pendingTileId ? tileLabel(exercise.hand.find((tile) => tile.id === pendingTileId)!) : ""}
-              </button>
-            </div>
-          ) : mode === "listening" ? (
+          {mode === "listening" ? (
             <ListeningPanel
               exercise={listeningExercise}
               selectedWaitIds={selectedWaitIds}
@@ -597,8 +585,6 @@ export function App() {
             <DrawPlayPanel
               session={drawSession}
               answer={drawAnswer}
-              pendingTileId={pendingTileId}
-              onConfirm={() => confirmDiscard()}
               onContinue={continueDrawRound}
               onClaimWin={claimWin}
               onNewGame={nextExercise}
@@ -1067,7 +1053,7 @@ function TileRack({
                     event.stopPropagation();
                     moveGold(row.suit, tile.instanceId);
                   }}
-                  aria-label={`打出${tileLabel(tile)}`}
+                  aria-label={pendingId === tile.id ? `再次点击打出${tileLabel(tile)}` : `选择${tileLabel(tile)}`}
                   title={isGold ? "金牌可拖动调整位置" : undefined}
                 >
                   <TileFace tile={tile} isGold={isGold} />
@@ -1184,8 +1170,6 @@ function DrawStatus({ session }: { session: DrawSession }) {
 function DrawPlayPanel({
   session,
   answer,
-  pendingTileId,
-  onConfirm,
   onContinue,
   onClaimWin,
   onNewGame,
@@ -1193,46 +1177,36 @@ function DrawPlayPanel({
 }: {
   session: DrawSession;
   answer: AnswerState | null;
-  pendingTileId: string | null;
-  onConfirm: () => void;
   onContinue: () => void;
   onClaimWin: () => void;
   onNewGame: () => void;
   winClaimed: boolean;
 }) {
-  const pendingTile = pendingTileId ? session.hand.find((tile) => tile.id === pendingTileId) : undefined;
   const canContinue = Boolean(answer) && !session.won && !session.exhausted;
+  const showRoundAction = session.won || canContinue || session.exhausted;
 
   return (
     <div className="draw-play-panel">
-      <div className="action-strip draw-actions">
-        {session.won ? (
-          <button className="confirm-action win-action" type="button" onClick={onClaimWin} disabled={winClaimed}>
-            <Sparkles size={18} />
-            {winClaimed ? "已完成胡牌" : "胡牌"}
-          </button>
-        ) : canContinue ? (
-          <button className="confirm-action" type="button" onClick={onContinue}>
-            <RefreshCcw size={18} />
-            继续摸牌
-          </button>
-        ) : session.exhausted ? (
-          <button className="confirm-action" type="button" onClick={onNewGame}>
-            <RefreshCcw size={18} />
-            开新局
-          </button>
-        ) : (
-          <button
-            className="confirm-action"
-            type="button"
-            onClick={onConfirm}
-            disabled={!pendingTileId || Boolean(answer) || !session.drawnTile}
-          >
-            <Check size={18} />
-            确认打出{pendingTile ? tileLabel(pendingTile) : ""}
-          </button>
-        )}
-      </div>
+      {showRoundAction ? (
+        <div className="action-strip draw-actions">
+          {session.won ? (
+            <button className="confirm-action win-action" type="button" onClick={onClaimWin} disabled={winClaimed}>
+              <Sparkles size={18} />
+              {winClaimed ? "已完成胡牌" : "胡牌"}
+            </button>
+          ) : canContinue ? (
+            <button className="confirm-action" type="button" onClick={onContinue}>
+              <RefreshCcw size={18} />
+              继续摸牌
+            </button>
+          ) : (
+            <button className="confirm-action" type="button" onClick={onNewGame}>
+              <RefreshCcw size={18} />
+              开新局
+            </button>
+          )}
+        </div>
+      ) : null}
 
       <div className="river-panel">
         <div className="panel-title">
@@ -1667,7 +1641,7 @@ function FeedbackPanel({
             <span>
               已选中 <strong>{tileLabel(exercise.hand.find((tile) => tile.id === pendingTileId)!)}</strong>
             </span>
-            <em>再次点击同张或点确认</em>
+            <em>再次点击同张即可打出</em>
           </div>
         ) : null}
         {exercise.specialPatterns.length > 0 ? (
@@ -1822,7 +1796,7 @@ function DrawFeedbackPanel({
             <span>
               已选中 <strong>{tileLabel(session.hand.find((tile) => tile.id === pendingTileId)!)}</strong>
             </span>
-            <em>再次点击同张或点确认</em>
+            <em>再次点击同张即可打出</em>
           </div>
         ) : null}
         {best && hintLevel === "light" ? <LightHintBox hints={directionHints} /> : null}

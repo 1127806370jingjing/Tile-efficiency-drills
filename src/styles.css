@@ -3316,15 +3316,6 @@ h1 {
   font-size: 12px;
 }
 
-.action-strip.confirm-only {
-  grid-template-columns: minmax(180px, 260px);
-  justify-content: end;
-}
-
-.action-strip.confirm-only .confirm-action {
-  margin-top: 12px;
-}
-
 .feedback-hero,
 .review-head {
   grid-template-columns: auto minmax(0, 1fr);
@@ -3516,10 +3507,6 @@ h1 {
   .hint-row.compact .segmented button {
     min-height: 28px;
     padding: 0 6px;
-  }
-
-  .action-strip.confirm-only {
-    grid-template-columns: 1fr;
   }
 
   .review-head:has(.review-next-action) {
