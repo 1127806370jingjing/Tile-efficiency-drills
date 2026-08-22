@@ -111,6 +111,14 @@ export function createListeningExercise(): ListeningExercise {
   let exercise = dealListeningExercise();
   let guard = 0;
 
+  while (exercise.waitingTiles.length < 2 && guard < 180) {
+    exercise = dealListeningExercise();
+    guard += 1;
+  }
+
+  if (exercise.waitingTiles.length > 0) return exercise;
+
+  guard = 0;
   while (exercise.waitingTiles.length === 0 && guard < 80) {
     exercise = dealListeningExercise();
     guard += 1;

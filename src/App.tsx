@@ -1894,9 +1894,6 @@ function ListeningFeedbackPanel({
   onNext: () => void;
 }) {
   const waits = exercise.waitingTiles.map((tile) => tileLabel(tile));
-  const selectedLabels = answer?.selectedIds.map((id) => tileLabel(allTileKinds.find((tile) => tile.id === id)!)) ?? [];
-  const missed = waits.filter((label) => !selectedLabels.includes(label));
-  const extra = selectedLabels.filter((label) => !waits.includes(label));
 
   if (!answer) {
     return (
@@ -1929,10 +1926,10 @@ function ListeningFeedbackPanel({
     <div className={`feedback-panel answered review-panel ${answer.correct ? "correct" : "wrong"}`}>
       <div className="review-head">
         <span className="review-badge">
-          <span className="badge-symbol">{answer.correct ? "对" : "补"}</span>
+          <span className="badge-symbol">{answer.correct ? "对" : "听"}</span>
         </span>
         <div>
-          <strong>{answer.correct ? "听牌判断正确" : "听口还没找全"}</strong>
+          <strong>{answer.correct ? "听牌判断正确" : "对照正确听口"}</strong>
           <span>
             听牌 {waits.length} 种 · 共 {exercise.waitingCopies} 张
           </span>
@@ -1948,9 +1945,7 @@ function ListeningFeedbackPanel({
       </div>
 
       <div className="reason-list">
-        {missed.length > 0 ? <p>漏选：{missed.join("、")}</p> : null}
-        {extra.length > 0 ? <p>多选：{extra.join("、")}</p> : null}
-        {answer.correct ? <p>选择完整，下一题继续保持。</p> : null}
+        <p>{answer.correct ? "选择完整，下一题继续保持。" : "上方就是本题全部正确听口；先按花色对照，再试着把每张进张补进面子或雀头。"}</p>
       </div>
     </div>
   );
