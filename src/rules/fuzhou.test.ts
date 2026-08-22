@@ -1,5 +1,15 @@
 import { describe, expect, it } from "vitest";
-import { allTileKinds, canWin, createExercise, createListeningExercise, evaluateDiscards, getWaitingTiles } from "./fuzhou";
+import {
+  allTileKinds,
+  canWin,
+  createDrawSession,
+  createExercise,
+  createListeningExercise,
+  discardFromDrawSession,
+  drawFromWall,
+  evaluateDiscards,
+  getWaitingTiles,
+} from "./fuzhou";
 import type { Tile, TileInstance } from "./fuzhou";
 
 function tile(id: string): Tile {
@@ -161,5 +171,36 @@ describe("fuzhou rules", () => {
 
     expect(exercise.hand).toHaveLength(16);
     expect(exercise.waitingTiles.length).toBeGreaterThan(0);
+  });
+
+  it("creates a draw session with a legal drawn hand and remaining wall", () => {
+    const session = createDrawSession();
+    const counts = new Map<string, number>();
+
+    [...session.hand, ...session.wall, ...session.river].forEach((item) => {
+      counts.set(item.id, (counts.get(item.id) ?? 0) + 1);
+    });
+
+    expect(session.hand).toHaveLength(17);
+    expect(session.drawnTile).not.toBeNull();
+    expect(session.round).toBe(1);
+    expect(session.evaluations.length).toBeGreaterThan(0);
+    expect([...counts.values()].every((count) => count <= 4)).toBe(true);
+  });
+
+  it("draw session discards to river and draws again", () => {
+    const session = createDrawSession();
+    const discardId = session.evaluations[0].tile.id;
+    const afterDiscard = discardFromDrawSession(session, discardId);
+
+    expect(afterDiscard.hand).toHaveLength(16);
+    expect(afterDiscard.river).toHaveLength(1);
+    expect(afterDiscard.drawnTile).toBeNull();
+
+    const afterDraw = drawFromWall(afterDiscard);
+
+    expect(afterDraw.hand).toHaveLength(17);
+    expect(afterDraw.drawnTile).not.toBeNull();
+    expect(afterDraw.round).toBe(2);
   });
 });

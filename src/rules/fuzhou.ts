@@ -44,6 +44,23 @@ export type ListeningExercise = {
   specialPatterns: SpecialPattern[];
 };
 
+export type DrawSession = {
+  hand: TileInstance[];
+  gold: Tile;
+  wall: TileInstance[];
+  river: TileInstance[];
+  drawnTile: TileInstance | null;
+  round: number;
+  maxRounds: number;
+  evaluations: DiscardEvaluation[];
+  bestDiscardIds: string[];
+  waitingTiles: Tile[];
+  waitingCopies: number;
+  specialPatterns: SpecialPattern[];
+  won: boolean;
+  exhausted: boolean;
+};
+
 const suits: Suit[] = ["wan", "tong", "tiao"];
 
 export const suitLabels: Record<Suit, string> = {
@@ -102,6 +119,57 @@ export function createListeningExercise(): ListeningExercise {
   return exercise;
 }
 
+export function createDrawSession(maxRounds = 18): DrawSession {
+  const gold = randomItem(allTileKinds);
+  const wall = buildWall();
+  shuffle(wall);
+
+  const session = hydrateDrawSession({
+    hand: sortHand(wall.slice(0, 16), gold),
+    gold,
+    wall: wall.slice(16),
+    river: [],
+    drawnTile: null,
+    round: 0,
+    maxRounds,
+  });
+
+  return drawFromWall(session);
+}
+
+export function drawFromWall(session: DrawSession): DrawSession {
+  if (session.drawnTile || session.won || session.exhausted || session.round >= session.maxRounds) {
+    return hydrateDrawSession(session);
+  }
+
+  const [drawnTile, ...wall] = session.wall;
+  if (!drawnTile) {
+    return hydrateDrawSession({ ...session, exhausted: true });
+  }
+
+  return hydrateDrawSession({
+    ...session,
+    hand: sortHand([...session.hand, drawnTile], session.gold),
+    wall,
+    drawnTile,
+    round: session.round + 1,
+  });
+}
+
+export function discardFromDrawSession(session: DrawSession, tileId: string): DrawSession {
+  if (!session.drawnTile || session.won) return hydrateDrawSession(session);
+
+  const discarded = session.hand.find((tile) => tile.id === tileId);
+  if (!discarded) return hydrateDrawSession(session);
+
+  return hydrateDrawSession({
+    ...session,
+    hand: sortHand(removeOneTile(session.hand, tileId), session.gold),
+    river: [...session.river, discarded],
+    drawnTile: null,
+  });
+}
+
 function dealListeningExercise(): ListeningExercise {
   const gold = randomItem(allTileKinds);
   const wall = buildWall();
@@ -137,6 +205,41 @@ function dealExercise(): Exercise {
     evaluations,
     bestDiscardIds,
     specialPatterns: describeSpecialPatterns(hand, gold),
+  };
+}
+
+function hydrateDrawSession(
+  session: Omit<
+    DrawSession,
+    "evaluations" | "bestDiscardIds" | "waitingTiles" | "waitingCopies" | "specialPatterns" | "won" | "exhausted"
+  > &
+    Partial<
+      Pick<
+        DrawSession,
+        "evaluations" | "bestDiscardIds" | "waitingTiles" | "waitingCopies" | "specialPatterns" | "won" | "exhausted"
+      >
+    >,
+): DrawSession {
+  const evaluations = session.drawnTile ? evaluateDiscards(session.hand, session.gold) : [];
+  const bestScore = evaluations.length > 0 ? Math.max(...evaluations.map((item) => item.score)) : 0;
+  const bestDiscardIds = evaluations
+    .filter((item) => item.score >= bestScore - 0.01)
+    .map((item) => item.tile.id);
+  const baseHand = session.drawnTile ? removeOneTile(session.hand, session.drawnTile.id) : session.hand;
+  const waitingTiles = getWaitingTiles(baseHand, session.gold);
+  const remainingCounts = getRemainingCounts([...session.hand, ...session.river]);
+  const waitingCopies = waitingTiles.reduce((sum, tile) => sum + (remainingCounts.get(tile.id) ?? 0), 0);
+
+  return {
+    ...session,
+    evaluations,
+    bestDiscardIds,
+    waitingTiles,
+    waitingCopies,
+    specialPatterns: describeSpecialPatterns(session.hand, session.gold),
+    won: canWin(session.hand, session.gold),
+    exhausted:
+      session.exhausted ?? ((session.wall.length === 0 || session.round >= session.maxRounds) && !session.drawnTile),
   };
 }
 

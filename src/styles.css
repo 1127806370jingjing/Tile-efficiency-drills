@@ -1598,6 +1598,8 @@ body {
 
 .app-shell {
   min-height: 100vh;
+  position: relative;
+  overflow-x: hidden;
   padding: 28px 24px 110px;
   background:
     radial-gradient(circle at 18% 0%, rgba(77, 145, 94, 0.18), transparent 34%),
@@ -1607,7 +1609,43 @@ body {
 }
 
 .hero-panel {
+  position: relative;
+  z-index: 1;
   margin-bottom: 18px;
+}
+
+.hero-art {
+  position: relative;
+  width: min(31vw, 430px);
+  min-width: 260px;
+  height: 150px;
+  border: 1px solid rgba(228, 199, 111, 0.18);
+  border-radius: 22px;
+  overflow: hidden;
+  background: rgba(245, 235, 208, 0.08);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.28),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+}
+
+.hero-art::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  background:
+    radial-gradient(circle at 18% 24%, rgba(255, 245, 218, 0.22), transparent 32%),
+    linear-gradient(90deg, rgba(8, 43, 29, 0.1), rgba(8, 43, 29, 0.58));
+  pointer-events: none;
+}
+
+.hero-art img {
+  width: 100%;
+  height: 100%;
+  display: block;
+  object-fit: cover;
+  object-position: 50% 42%;
+  filter: saturate(0.94) contrast(0.96) brightness(0.92);
 }
 
 .brand-mark {
@@ -1632,6 +1670,8 @@ h1 {
 }
 
 .trainer-grid {
+  position: relative;
+  z-index: 1;
   grid-template-columns: minmax(0, 1fr) 360px;
   gap: 18px;
 }
@@ -1997,6 +2037,17 @@ h1 {
     padding: 16px 12px 94px;
   }
 
+  .hero-panel {
+    gap: 12px;
+  }
+
+  .hero-art {
+    width: 180px;
+    min-width: 180px;
+    height: 82px;
+    border-radius: 18px;
+  }
+
   .trainer-grid {
     grid-template-columns: 1fr;
   }
@@ -2015,6 +2066,21 @@ h1 {
     width: 44px;
     height: 44px;
     border-radius: 15px;
+  }
+
+  .hero-panel {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  .hero-art {
+    width: 100%;
+    min-width: 0;
+    height: 96px;
+  }
+
+  .hero-art img {
+    object-position: 50% 47%;
   }
 
   .felt {
@@ -2074,6 +2140,120 @@ h1 {
   scrollbar-width: none;
 }
 
+.mahjong-tile.drawn {
+  animation: drawnTilePop 520ms cubic-bezier(0.2, 0.9, 0.2, 1.2);
+}
+
+.mahjong-tile.drawn::before {
+  content: "摸";
+  position: absolute;
+  top: -12px;
+  right: -8px;
+  z-index: 5;
+  display: grid;
+  width: 28px;
+  height: 28px;
+  place-items: center;
+  border-radius: 999px;
+  color: #5c2f06;
+  font-size: 13px;
+  font-weight: 900;
+  background: linear-gradient(145deg, #fff2a8, #e3bb49);
+  box-shadow: 0 8px 18px rgba(0, 0, 0, 0.22), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+}
+
+.draw-status {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  margin: 12px auto 0;
+  padding: 9px 12px;
+  border: 1px solid rgba(218, 184, 93, 0.18);
+  border-radius: 999px;
+  color: rgba(237, 247, 234, 0.74);
+  background: rgba(6, 37, 25, 0.38);
+  backdrop-filter: blur(10px);
+}
+
+.draw-status strong {
+  color: #f8edc9;
+}
+
+.draw-status.won {
+  color: #fff7c7;
+  background: rgba(112, 86, 14, 0.4);
+  animation: rewardPulse 1100ms ease-in-out infinite alternate;
+}
+
+.draw-play-panel {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.draw-actions {
+  margin-top: 0;
+}
+
+.draw-actions .confirm-action {
+  margin-top: 0;
+}
+
+.win-action {
+  background: linear-gradient(135deg, #e4c76f, #e15b4a);
+}
+
+.river-panel {
+  padding: 16px;
+  border: 1px solid rgba(218, 184, 93, 0.18);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(27, 91, 61, 0.72), rgba(14, 63, 42, 0.78));
+  box-shadow: 0 18px 48px rgba(0, 0, 0, 0.18), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(10px);
+}
+
+.river-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.river-tile {
+  transform: rotate(-1deg);
+  animation: riverTileIn 260ms ease both;
+}
+
+@keyframes drawnTilePop {
+  0% {
+    opacity: 0;
+    transform: translateY(-24px) scale(0.92);
+  }
+  70% {
+    opacity: 1;
+    transform: translateY(-8px) scale(1.04);
+  }
+  100% {
+    transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes riverTileIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px) rotate(-4deg);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) rotate(-1deg);
+  }
+}
+
 .suit-row-tiles::-webkit-scrollbar {
   display: none;
 }
@@ -2115,6 +2295,21 @@ h1 {
     row-gap: 22px;
     padding-right: 4px;
     padding-bottom: 22px;
+  }
+
+  .draw-status {
+    justify-content: center;
+    border-radius: 16px;
+    font-size: 12px;
+  }
+
+  .draw-actions {
+    grid-template-columns: 1fr;
+  }
+
+  .river-panel {
+    padding: 12px;
+    border-radius: 15px;
   }
 
   .mahjong-tile {

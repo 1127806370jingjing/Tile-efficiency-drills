@@ -2,6 +2,7 @@ import { Award, BookOpen, Bot, Check, Eye, Loader2, Menu, RefreshCcw, Search, Se
 import { type DragEvent, type PointerEvent, useEffect, useMemo, useRef, useState } from "react";
 import {
   type DiscardEvaluation,
+  type DrawSession,
   type Exercise,
   type HintLevel,
   type ListeningExercise,
@@ -9,8 +10,11 @@ import {
   type Tile,
   type TileInstance,
   allTileKinds,
+  createDrawSession,
   createExercise,
   createListeningExercise,
+  discardFromDrawSession,
+  drawFromWall,
   getBestEvaluations,
   getEvaluationForTile,
   tileLabel,
@@ -27,7 +31,7 @@ type ListeningAnswer = {
   correct: boolean;
 };
 
-type PracticeMode = "discard" | "listening";
+type PracticeMode = "discard" | "listening" | "draw";
 
 type RewardState = {
   id: string;
@@ -153,7 +157,11 @@ export function App() {
   const [mode, setMode] = useState<PracticeMode>("discard");
   const [exercise, setExercise] = useState<Exercise>(() => createExercise());
   const [listeningExercise, setListeningExercise] = useState<ListeningExercise>(() => createListeningExercise());
+  const [drawSession, setDrawSession] = useState<DrawSession>(() => createDrawSession());
   const [answer, setAnswer] = useState<AnswerState | null>(null);
+  const [drawAnswer, setDrawAnswer] = useState<AnswerState | null>(null);
+  const [drawReviewEvaluations, setDrawReviewEvaluations] = useState<DiscardEvaluation[]>([]);
+  const [drawWinClaimed, setDrawWinClaimed] = useState(false);
   const [pendingTileId, setPendingTileId] = useState<string | null>(null);
   const [listeningAnswer, setListeningAnswer] = useState<ListeningAnswer | null>(null);
   const [selectedWaitIds, setSelectedWaitIds] = useState<string[]>([]);
@@ -178,8 +186,9 @@ export function App() {
   }, [stats]);
 
   useEffect(() => {
-    setHandRows(buildHandRows(mode === "discard" ? exercise.hand : listeningExercise.hand));
-  }, [exercise, listeningExercise, mode]);
+    const hand = mode === "discard" ? exercise.hand : mode === "listening" ? listeningExercise.hand : drawSession.hand;
+    setHandRows(buildHandRows(hand));
+  }, [drawSession, exercise, listeningExercise, mode]);
 
   useEffect(() => {
     if (!reward) return;
@@ -196,7 +205,15 @@ export function App() {
   }, [stats.streak]);
 
   const bestEvaluations = useMemo(() => getBestEvaluations(exercise), [exercise]);
-  const activeHand = mode === "discard" ? exercise.hand : listeningExercise.hand;
+  const drawBestEvaluations = useMemo(
+    () => {
+      const evaluations = drawReviewEvaluations.length > 0 ? drawReviewEvaluations : drawSession.evaluations;
+      const bestScore = evaluations.length > 0 ? Math.max(...evaluations.map((item) => item.score)) : 0;
+      return evaluations.filter((item) => item.score >= bestScore - 0.01);
+    },
+    [drawReviewEvaluations, drawSession.evaluations],
+  );
+  const activeHand = mode === "discard" ? exercise.hand : mode === "listening" ? listeningExercise.hand : drawSession.hand;
   const tilesByInstance = useMemo(
     () => new Map(activeHand.map((tile) => [tile.instanceId, tile])),
     [activeHand],
@@ -205,10 +222,15 @@ export function App() {
   function nextExercise() {
     if (mode === "discard") {
       setExercise(createExercise());
-    } else {
+    } else if (mode === "listening") {
       setListeningExercise(createListeningExercise());
       setSelectedWaitIds([]);
       setListeningAnswer(null);
+    } else {
+      setDrawSession(createDrawSession());
+      setDrawAnswer(null);
+      setDrawReviewEvaluations([]);
+      setDrawWinClaimed(false);
     }
     setAnswer(null);
     setPendingTileId(null);
@@ -216,13 +238,22 @@ export function App() {
       {
         id: crypto.randomUUID(),
         role: "assistant",
-        text: mode === "discard" ? "新题已刷新。先点选要打的牌，再确认提交。" : "听牌题已刷新。请选择你认为能胡的进张，再确认答案。",
+        text:
+          mode === "discard"
+            ? "新题已刷新。先点选要打的牌，再确认提交。"
+            : mode === "listening"
+              ? "听牌题已刷新。请选择你认为能胡的进张，再确认答案。"
+              : "新的摸打局已开始。摸牌后先判断能不能胡，再选择要打出的牌。",
       },
     ]);
   }
 
   function chooseTile(tile: TileInstance) {
-    if (answer) return;
+    if (mode === "draw") {
+      chooseDrawTile(tile);
+      return;
+    }
+    if (answer || mode !== "discard") return;
     if (pendingTileId !== tile.id) {
       setPendingTileId(tile.id);
       return;
@@ -231,7 +262,11 @@ export function App() {
   }
 
   function confirmDiscard(tileId = pendingTileId) {
-    if (!tileId || answer) return;
+    if (mode === "draw") {
+      confirmDrawDiscard(tileId);
+      return;
+    }
+    if (!tileId || answer || mode !== "discard") return;
     const tile = exercise.hand.find((item) => item.id === tileId);
     if (!tile) return;
     const evaluation = getEvaluationForTile(exercise, tile.id);
@@ -242,10 +277,55 @@ export function App() {
     recordPracticeResult(correct);
   }
 
+  function chooseDrawTile(tile: TileInstance) {
+    if (drawAnswer || drawSession.won || !drawSession.drawnTile) return;
+    if (pendingTileId !== tile.id) {
+      setPendingTileId(tile.id);
+      return;
+    }
+    confirmDrawDiscard(tile.id);
+  }
+
+  function confirmDrawDiscard(tileId = pendingTileId) {
+    if (!tileId || drawAnswer || drawSession.won || !drawSession.drawnTile) return;
+    const evaluation = drawSession.evaluations.find((item) => item.tile.id === tileId);
+    if (!evaluation) return;
+
+    const correct = drawSession.bestDiscardIds.includes(tileId);
+    setDrawAnswer({ tileId, correct, evaluation });
+    setDrawReviewEvaluations(drawSession.evaluations);
+    setDrawSession((current) => discardFromDrawSession(current, tileId));
+    setPendingTileId(null);
+    recordPracticeResult(correct);
+  }
+
+  function continueDrawRound() {
+    setDrawSession((current) => drawFromWall(current));
+    setDrawAnswer(null);
+    setDrawReviewEvaluations([]);
+    setPendingTileId(null);
+    setDrawWinClaimed(false);
+  }
+
+  function claimWin() {
+    if (!drawSession.won || drawWinClaimed) return;
+    setDrawWinClaimed(true);
+    recordPracticeResult(true);
+    setReward({
+      id: crypto.randomUUID(),
+      streak: stats.streak + 1,
+      title: "胡牌达成",
+      message: "这局摸打完整跑通了，节奏感很好。",
+    });
+  }
+
   function switchMode(nextMode: PracticeMode) {
     setMode(nextMode);
     setModeOpen(false);
     setAnswer(null);
+    setDrawAnswer(null);
+    setDrawReviewEvaluations([]);
+    setDrawWinClaimed(false);
     setPendingTileId(null);
     setListeningAnswer(null);
     setSelectedWaitIds([]);
@@ -256,7 +336,9 @@ export function App() {
         text:
           nextMode === "discard"
             ? "已切换到弃牌练习。先点选一张牌，再确认打出。"
-            : "已切换到听牌练习。选出所有能让这手牌胡牌的进张。",
+            : nextMode === "listening"
+              ? "已切换到听牌练习。选出所有能让这手牌胡牌的进张。"
+              : "已切换到摸打到胡。每轮摸一张、打一张，先从自己的牌河开始复盘。",
       },
     ]);
   }
@@ -316,7 +398,17 @@ export function App() {
           "Content-Type": "application/json",
         },
         body: JSON.stringify(
-          buildCoachPayload(exercise, answer, trimmedQuestion, mode, listeningExercise, listeningAnswer),
+          buildCoachPayload(
+            exercise,
+            answer,
+            trimmedQuestion,
+            mode,
+            listeningExercise,
+            listeningAnswer,
+            drawSession,
+            drawAnswer,
+            drawReviewEvaluations,
+          ),
         ),
       });
 
@@ -341,7 +433,16 @@ export function App() {
           role: "assistant",
           text:
             cleanCoachText(data.answer) ||
-            buildLocalCoachReply(exercise, answer, trimmedQuestion, mode, listeningExercise),
+            buildLocalCoachReply(
+              exercise,
+              answer,
+              trimmedQuestion,
+              mode,
+              listeningExercise,
+              drawSession,
+              drawAnswer,
+              drawReviewEvaluations,
+            ),
           usage: data.usage ?? undefined,
           model: data.model,
         },
@@ -352,7 +453,16 @@ export function App() {
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          text: buildLocalCoachReply(exercise, answer, trimmedQuestion, mode, listeningExercise),
+          text: buildLocalCoachReply(
+            exercise,
+            answer,
+            trimmedQuestion,
+            mode,
+            listeningExercise,
+            drawSession,
+            drawAnswer,
+            drawReviewEvaluations,
+          ),
           model: "本地规则引擎 · DeepSeek",
         },
       ]);
@@ -378,6 +488,9 @@ export function App() {
             <p>从“摸进后打哪张”开始，练会金牌、搭子和有效进张。</p>
           </div>
         </div>
+        <div className="hero-art" aria-hidden="true">
+          <img src="/mahjong-theme-art.jpg" alt="" />
+        </div>
       </section>
 
       <section className="trainer-grid">
@@ -386,7 +499,7 @@ export function App() {
             <div>
               <span className="label">本局金牌</span>
               <strong className="gold-name">
-                {tileLabel(mode === "discard" ? exercise.gold : listeningExercise.gold)}
+                {tileLabel(mode === "discard" ? exercise.gold : mode === "listening" ? listeningExercise.gold : drawSession.gold)}
               </strong>
             </div>
             <button className="icon-button" type="button" onClick={nextExercise} aria-label="换一题">
@@ -399,16 +512,22 @@ export function App() {
               <BookOpen size={18} />
               {mode === "discard"
                 ? "先点选要打的牌，再确认提交，避免误触。"
-                : "请选择所有摸到即可胡的牌，练听口识别。"}
+                : mode === "listening"
+                  ? "请选择所有摸到即可胡的牌，练听口识别。"
+                  : drawSession.won
+                    ? "这手牌已经成胡形，可以点击胡牌完成本局。"
+                    : "每轮摸一张、打一张；牌河先记录你自己的出牌。"}
             </div>
+            {mode === "draw" ? <DrawStatus session={drawSession} /> : null}
             <TileRack
               rows={handRows}
               tilesByInstance={tilesByInstance}
-              gold={mode === "discard" ? exercise.gold : listeningExercise.gold}
-              selectedId={answer?.tileId}
+              gold={mode === "discard" ? exercise.gold : mode === "listening" ? listeningExercise.gold : drawSession.gold}
+              selectedId={mode === "draw" ? drawAnswer?.tileId : answer?.tileId}
               pendingId={pendingTileId}
-              disabled={Boolean(answer)}
-              onChoose={mode === "discard" ? chooseTile : undefined}
+              disabled={mode === "draw" ? Boolean(drawAnswer) || drawSession.won || !drawSession.drawnTile : Boolean(answer)}
+              drawnInstanceId={mode === "draw" ? drawSession.drawnTile?.instanceId : undefined}
+              onChoose={mode === "discard" || mode === "draw" ? chooseTile : undefined}
               onMoveGold={setHandRows}
             />
           </div>
@@ -426,7 +545,7 @@ export function App() {
                 确认打出{pendingTileId ? tileLabel(exercise.hand.find((tile) => tile.id === pendingTileId)!) : ""}
               </button>
             </div>
-          ) : (
+          ) : mode === "listening" ? (
             <ListeningPanel
               exercise={listeningExercise}
               selectedWaitIds={selectedWaitIds}
@@ -434,6 +553,19 @@ export function App() {
               onToggleWait={toggleWait}
               onConfirm={confirmListening}
               onNext={nextExercise}
+            />
+          ) : (
+            <DrawPlayPanel
+              session={drawSession}
+              answer={drawAnswer}
+              pendingTileId={pendingTileId}
+              hintLevel={hintLevel}
+              setHintLevel={setHintLevel}
+              onConfirm={() => confirmDiscard()}
+              onContinue={continueDrawRound}
+              onClaimWin={claimWin}
+              onNewGame={nextExercise}
+              winClaimed={drawWinClaimed}
             />
           )}
         </div>
@@ -444,7 +576,7 @@ export function App() {
             messages={coachMessages}
             question={coachQuestion}
             loading={coachLoading}
-            answer={answer}
+            answer={mode === "draw" ? drawAnswer : answer}
             mode={mode}
             onQuestionChange={setCoachQuestion}
             onAsk={askCoach}
@@ -458,8 +590,17 @@ export function App() {
               hintLevel={hintLevel}
               onNext={nextExercise}
             />
-          ) : (
+          ) : mode === "listening" ? (
             <ListeningFeedbackPanel exercise={listeningExercise} answer={listeningAnswer} onNext={nextExercise} />
+          ) : (
+            <DrawFeedbackPanel
+              session={drawSession}
+              answer={drawAnswer}
+              pendingTileId={pendingTileId}
+              evaluations={drawReviewEvaluations.length > 0 ? drawReviewEvaluations : drawSession.evaluations}
+              bestEvaluations={drawBestEvaluations}
+              hintLevel={hintLevel}
+            />
           )}
         </aside>
       </section>
@@ -627,7 +768,11 @@ function ModeDock({
           <Eye size={18} />
           听牌练习
         </button>
-        <button className="mode-button locked" type="button" disabled>
+        <button
+          className={`mode-button ${mode === "draw" ? "active" : ""}`}
+          type="button"
+          onClick={() => onModeChange("draw")}
+        >
           <Sparkles size={18} />
           摸打到胡
         </button>
@@ -643,33 +788,54 @@ function buildCoachPayload(
   mode: PracticeMode,
   listeningExercise: ListeningExercise,
   listeningAnswer: ListeningAnswer | null,
+  drawSession: DrawSession,
+  drawAnswer: AnswerState | null,
+  drawReviewEvaluations: DiscardEvaluation[],
 ) {
   const bestEvaluations = getBestEvaluations(exercise);
+  const drawEvaluations = drawReviewEvaluations.length > 0 ? drawReviewEvaluations : drawSession.evaluations;
+  const drawBestScore = drawEvaluations.length > 0 ? Math.max(...drawEvaluations.map((item) => item.score)) : 0;
+  const drawBestEvaluations = drawEvaluations.filter((item) => item.score >= drawBestScore - 0.01);
+  const activeGold = mode === "discard" ? exercise.gold : mode === "listening" ? listeningExercise.gold : drawSession.gold;
+  const activeHand = mode === "discard" ? exercise.hand : mode === "listening" ? listeningExercise.hand : drawSession.hand;
 
   return {
     question,
-    mode: mode === "discard" ? "弃牌练习" : "听牌练习",
+    mode: mode === "discard" ? "弃牌练习" : mode === "listening" ? "听牌练习" : "摸打到胡",
     ruleset: "福州麻将新手教学版；不计分、不算花；金牌按万能牌理解。",
-    gold: tileLabel(mode === "discard" ? exercise.gold : listeningExercise.gold),
-    hand: (mode === "discard" ? exercise.hand : listeningExercise.hand).map((tile) => tileLabel(tile)),
-    selectedDiscard: answer
+    gold: tileLabel(activeGold),
+    hand: activeHand.map((tile) => tileLabel(tile)),
+    selectedDiscard: (mode === "draw" ? drawAnswer : answer)
       ? {
-          tile: tileLabel(answer.evaluation.tile),
-          correct: answer.correct,
-          evaluation: summarizeEvaluation(answer.evaluation),
+          tile: tileLabel((mode === "draw" ? drawAnswer : answer)!.evaluation.tile),
+          correct: (mode === "draw" ? drawAnswer : answer)!.correct,
+          evaluation: summarizeEvaluation((mode === "draw" ? drawAnswer : answer)!.evaluation),
         }
       : null,
-    recommendedDiscards: bestEvaluations.map(summarizeEvaluation),
-    topCandidates: exercise.evaluations.slice(0, 6).map(summarizeEvaluation),
+    recommendedDiscards: (mode === "draw" ? drawBestEvaluations : bestEvaluations).map(summarizeEvaluation),
+    topCandidates: (mode === "draw" ? drawEvaluations : exercise.evaluations).slice(0, 6).map(summarizeEvaluation),
     listening:
       mode === "listening"
         ? {
             selected: listeningAnswer?.selectedIds.map((id) => tileLabel(allTileKinds.find((tile) => tile.id === id)!)) ?? [],
             correctWaits: listeningExercise.waitingTiles.map((tile) => tileLabel(tile)),
             waitingCopies: listeningExercise.waitingCopies,
+        }
+        : null,
+    drawPlay:
+      mode === "draw"
+        ? {
+            round: drawSession.round,
+            maxRounds: drawSession.maxRounds,
+            drawnTile: drawSession.drawnTile ? tileLabel(drawSession.drawnTile) : null,
+            ownRiver: drawSession.river.map((tile) => tileLabel(tile)),
+            won: drawSession.won,
+            exhausted: drawSession.exhausted,
+            currentWaits: drawSession.waitingTiles.map((tile) => tileLabel(tile)),
           }
         : null,
-    specialPatterns: mode === "discard" ? exercise.specialPatterns : listeningExercise.specialPatterns,
+    specialPatterns:
+      mode === "discard" ? exercise.specialPatterns : mode === "listening" ? listeningExercise.specialPatterns : drawSession.specialPatterns,
   };
 }
 
@@ -690,6 +856,9 @@ function buildLocalCoachReply(
   question: string,
   mode: PracticeMode,
   listeningExercise: ListeningExercise,
+  drawSession: DrawSession,
+  drawAnswer: AnswerState | null,
+  drawReviewEvaluations: DiscardEvaluation[],
 ): string {
   if (mode === "listening") {
     const waits = listeningExercise.waitingTiles.map((tile) => tileLabel(tile)).join("、");
@@ -697,6 +866,38 @@ function buildLocalCoachReply(
       "目前本地预览没有连接 Cloudflare 后端，我先用规则引擎给你一个简版解释。",
       `这手牌现在听：${waits}，合计 ${listeningExercise.waitingCopies} 张剩余机会。`,
       `本局金牌是 ${tileLabel(listeningExercise.gold)}，金牌能补面子或雀头，所以听口判断要把它当万能牌一起看。`,
+    ].join("\n\n");
+  }
+
+  if (mode === "draw") {
+    const drawEvaluations = drawReviewEvaluations.length > 0 ? drawReviewEvaluations : drawSession.evaluations;
+    const bestScore = drawEvaluations.length > 0 ? Math.max(...drawEvaluations.map((item) => item.score)) : 0;
+    const best = drawEvaluations.filter((item) => item.score >= bestScore - 0.01)[0];
+    const selected = drawAnswer?.evaluation;
+    const target = selected ?? best;
+    const apiHint = "目前本地预览没有连接 Cloudflare 后端，我先用规则引擎给你一个简版解释。";
+
+    if (drawSession.won) {
+      return [
+        apiHint,
+        "这手牌摸进后已经成胡形，第一优先是识别能胡，不要再只按弃牌练习去拆牌。",
+        `本局金牌是 ${tileLabel(drawSession.gold)}，目前自己的牌河：${formatRiver(drawSession.river)}。`,
+      ].join("\n\n");
+    }
+
+    if (!target) {
+      return [
+        apiHint,
+        "这一巡刚打完，先看自己的牌河复盘刚才打出的牌，再点继续摸牌进入下一巡。",
+        `目前自己的牌河：${formatRiver(drawSession.river)}。`,
+      ].join("\n\n");
+    }
+
+    return [
+      apiHint,
+      `第 ${drawSession.round} 巡，摸到 ${drawSession.drawnTile ? tileLabel(drawSession.drawnTile) : "一张牌"}。推荐优先看 ${tileLabel(best.tile)}，打出后有 ${best.winningDraws.length} 种胡牌进张，共 ${best.winningDrawCopies} 张剩余机会。`,
+      selected ? `你刚才打 ${tileLabel(selected.tile)}：${selected.reasons.join(" ")}` : `如果打 ${tileLabel(target.tile)}：${target.reasons.join(" ")}`,
+      `自己的牌河：${formatRiver(drawSession.river)}。第一版先用它帮你复盘，后面再加三家出牌和防守。`,
     ].join("\n\n");
   }
 
@@ -727,6 +928,10 @@ function cleanCoachText(text?: string): string {
     .replace(/`([^`]+)`/g, "$1")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function formatRiver(river: TileInstance[]): string {
+  return river.length > 0 ? river.map((tile) => tileLabel(tile)).join("、") : "还没有弃牌";
 }
 
 function buildHandRows(hand: TileInstance[]): HandRow[] {
@@ -765,6 +970,7 @@ function TileRack({
   selectedId,
   pendingId,
   disabled,
+  drawnInstanceId,
   onChoose,
   onMoveGold,
 }: {
@@ -774,6 +980,7 @@ function TileRack({
   selectedId?: string;
   pendingId?: string | null;
   disabled: boolean;
+  drawnInstanceId?: string;
   onChoose?: (tile: TileInstance) => void;
   onMoveGold: (rows: HandRow[] | ((rows: HandRow[]) => HandRow[])) => void;
 }) {
@@ -809,7 +1016,9 @@ function TileRack({
                 <button
                   className={`mahjong-tile ${tile.suit} ${isGold ? "gold" : ""} ${
                     selectedId === tile.id ? "selected" : ""
-                  } ${pendingId === tile.id ? "pending" : ""} ${draggingId === tile.instanceId ? "dragging" : ""}`}
+                  } ${pendingId === tile.id ? "pending" : ""} ${
+                    drawnInstanceId === tile.instanceId ? "drawn" : ""
+                  } ${draggingId === tile.instanceId ? "dragging" : ""}`}
                   key={tile.instanceId}
                   type="button"
                   disabled={disabled || !onChoose}
@@ -929,6 +1138,96 @@ function StatsPanel({ stats }: { stats: Stats }) {
   );
 }
 
+function DrawStatus({ session }: { session: DrawSession }) {
+  return (
+    <div className={`draw-status ${session.won ? "won" : ""}`}>
+      <span>第 {session.round}/{session.maxRounds} 巡</span>
+      <strong>{session.drawnTile ? `摸到 ${tileLabel(session.drawnTile)}` : "等待摸牌"}</strong>
+      <span>牌墙 {session.wall.length} 张</span>
+    </div>
+  );
+}
+
+function DrawPlayPanel({
+  session,
+  answer,
+  pendingTileId,
+  hintLevel,
+  setHintLevel,
+  onConfirm,
+  onContinue,
+  onClaimWin,
+  onNewGame,
+  winClaimed,
+}: {
+  session: DrawSession;
+  answer: AnswerState | null;
+  pendingTileId: string | null;
+  hintLevel: HintLevel;
+  setHintLevel: (level: HintLevel) => void;
+  onConfirm: () => void;
+  onContinue: () => void;
+  onClaimWin: () => void;
+  onNewGame: () => void;
+  winClaimed: boolean;
+}) {
+  const pendingTile = pendingTileId ? session.hand.find((tile) => tile.id === pendingTileId) : undefined;
+  const canContinue = Boolean(answer) && !session.won && !session.exhausted;
+
+  return (
+    <div className="draw-play-panel">
+      <div className="action-strip draw-actions">
+        <HintControls hintLevel={hintLevel} setHintLevel={setHintLevel} />
+        {session.won ? (
+          <button className="confirm-action win-action" type="button" onClick={onClaimWin} disabled={winClaimed}>
+            <Sparkles size={18} />
+            {winClaimed ? "已完成胡牌" : "胡牌"}
+          </button>
+        ) : canContinue ? (
+          <button className="confirm-action" type="button" onClick={onContinue}>
+            <RefreshCcw size={18} />
+            继续摸牌
+          </button>
+        ) : session.exhausted ? (
+          <button className="confirm-action" type="button" onClick={onNewGame}>
+            <RefreshCcw size={18} />
+            开新局
+          </button>
+        ) : (
+          <button
+            className="confirm-action"
+            type="button"
+            onClick={onConfirm}
+            disabled={!pendingTileId || Boolean(answer) || !session.drawnTile}
+          >
+            <Check size={18} />
+            确认打出{pendingTile ? tileLabel(pendingTile) : ""}
+          </button>
+        )}
+      </div>
+
+      <div className="river-panel">
+        <div className="panel-title">
+          <BookOpen size={18} />
+          自己的牌河
+        </div>
+        {session.river.length > 0 ? (
+          <div className="river-tiles">
+            {session.river.map((tile) => (
+              <span className={`mini-tile river-tile ${tile.suit}`} key={tile.instanceId}>
+                <TileFace tile={tile} isGold={tile.id === session.gold.id} />
+                {tile.id === session.gold.id ? <span className="gold-chip">金</span> : null}
+              </span>
+            ))}
+          </div>
+        ) : (
+          <p className="body-copy">还没有弃牌。第一巡先看摸到的牌能不能让手牌更靠近听牌。</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function ListeningPanel({
   exercise,
   selectedWaitIds,
@@ -1010,9 +1309,13 @@ function CoachPanel({
   const quickQuestions =
     mode === "listening"
       ? ["这手牌听什么？", "为什么这些牌能胡？", "我漏看了哪里？"]
-      : answer
-        ? ["我这张打得怎么样？", "为什么推荐打那张？", "用新手话讲一遍"]
-        : ["这手牌先看哪里？", "为什么这些牌牌效低？", "金牌现在怎么用？"];
+      : mode === "draw"
+        ? answer
+          ? ["我这巡打得怎样？", "自己的牌河说明什么？", "下一巡先看哪里？"]
+          : ["这巡先打哪张？", "我现在能胡吗？", "牌河要观察什么？"]
+        : answer
+          ? ["我这张打得怎么样？", "为什么推荐打那张？", "用新手话讲一遍"]
+          : ["这手牌先看哪里？", "为什么这些牌牌效低？", "金牌现在怎么用？"];
 
   return (
     <div className="coach-panel">
@@ -1051,7 +1354,13 @@ function CoachPanel({
         <input
           value={question}
           onChange={(event) => onQuestionChange(event.target.value)}
-          placeholder={mode === "listening" ? "问：这手牌听哪些牌？" : "问：为什么这张牌效最低？"}
+          placeholder={
+            mode === "listening"
+              ? "问：这手牌听哪些牌？"
+              : mode === "draw"
+                ? "问：这巡为什么打这张？"
+                : "问：为什么这张牌效最低？"
+          }
           disabled={loading}
         />
         <button type="submit" aria-label="发送问题" disabled={loading || !question.trim()}>
@@ -1195,6 +1504,137 @@ function FeedbackPanel({
       <button className="primary-action" type="button" onClick={onNext}>
         下一题
       </button>
+    </div>
+  );
+}
+
+function DrawFeedbackPanel({
+  session,
+  answer,
+  pendingTileId,
+  evaluations,
+  bestEvaluations,
+  hintLevel,
+}: {
+  session: DrawSession;
+  answer: AnswerState | null;
+  pendingTileId: string | null;
+  evaluations: DiscardEvaluation[];
+  bestEvaluations: DiscardEvaluation[];
+  hintLevel: HintLevel;
+}) {
+  const best = bestEvaluations[0];
+
+  if (session.won) {
+    return (
+      <div className="feedback-panel answered review-panel correct">
+        <div className="review-head">
+          <span className="review-badge">
+            <Sparkles size={20} />
+          </span>
+          <div>
+            <strong>已经成胡形</strong>
+            <span>这一巡先练识别胡牌，不要继续拆牌</span>
+          </div>
+        </div>
+        <div className="reason-list">
+          <p>摸进 {session.drawnTile ? tileLabel(session.drawnTile) : "这张牌"} 后，当前手牌已经满足胡牌结构。</p>
+          <p>自己的牌河：{formatRiver(session.river)}。</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!answer) {
+    return (
+      <div className="feedback-panel guide-panel">
+        <div className="feedback-hero">
+          <span className="feedback-icon">
+            <Sparkles size={22} />
+          </span>
+          <div>
+            <strong>摸打到胡</strong>
+            <span>摸一张，打一张，逐巡靠近听牌</span>
+          </div>
+        </div>
+        <p className="feedback-brief">
+          先看摸进牌是否让搭子变顺、对子变刻，再比较打出后还能保留多少有效进张。
+        </p>
+        {pendingTileId ? (
+          <div className="feedback-status pending-card">
+            <Check size={17} />
+            <span>
+              已选中 <strong>{tileLabel(session.hand.find((tile) => tile.id === pendingTileId)!)}</strong>
+            </span>
+            <em>再次点击同张或点确认</em>
+          </div>
+        ) : null}
+        {best && hintLevel !== "off" ? (
+          <div className="recommend-strip">
+            <span>本巡可优先观察</span>
+            <div>
+              {evaluations.slice(0, 3).map((item, index) => (
+                <strong key={item.tile.id}>
+                  {index + 1}. {tileLabel(item.tile)}
+                </strong>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        <div className="review-section">
+          <span className="section-kicker">当前 16 张底牌听口</span>
+          <MiniTileList tiles={session.waitingTiles} emptyText="还没形成直接听口" />
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className={`feedback-panel answered review-panel ${answer.correct ? "correct" : "wrong"}`}>
+      <div className="review-head">
+        <span className="review-badge">
+          {answer.correct ? <Check size={20} /> : <X size={20} />}
+        </span>
+        <div>
+          <strong>{answer.correct ? "本巡选择合理" : "这巡还有更优选择"}</strong>
+          <span>
+            打 {tileLabel(answer.evaluation.tile)} · 听牌 {answer.evaluation.winningDraws.length} 种 · 共{" "}
+            {answer.evaluation.winningDrawCopies} 张
+          </span>
+        </div>
+      </div>
+
+      <div className="review-grid">
+        <div className="review-section">
+          <span className="section-kicker">打出后的有效进张</span>
+          <MiniTileList tiles={answer.evaluation.winningDraws} emptyText="暂无直接听牌" />
+        </div>
+        <div className="review-section">
+          <span className="section-kicker">本巡推荐</span>
+          <div className="top-candidates">
+            {evaluations.slice(0, 3).map((item, index) => (
+              <div className={bestEvaluations.some((bestItem) => bestItem.tile.id === item.tile.id) ? "top-card best" : "top-card"} key={item.tile.id}>
+                <strong>
+                  {index + 1}. 打 {tileLabel(item.tile)}
+                </strong>
+                <span>
+                  听牌 {item.winningDraws.length} 种 · {item.winningDrawCopies} 张
+                </span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      {hintLevel !== "off" ? (
+        <div className="reason-list">
+          {(answer.correct ? answer.evaluation.reasons : best?.reasons ?? answer.evaluation.reasons).map((reason) => (
+            <p key={reason}>{reason}</p>
+          ))}
+          {!answer.correct && best ? <p>推荐打：{bestEvaluations.map((item) => tileLabel(item.tile)).join("、")}</p> : null}
+          <p>自己的牌河：{formatRiver(session.river)}。</p>
+        </div>
+      ) : null}
     </div>
   );
 }
