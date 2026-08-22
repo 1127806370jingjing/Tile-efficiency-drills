@@ -1604,10 +1604,16 @@ h1 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
   gap: 5px;
+  width: 100%;
   margin-top: 12px;
   padding: 5px;
   border-radius: 16px;
   background: rgba(231, 236, 230, 0.72);
+}
+
+.table-tools .listening-mode-switch {
+  margin-top: 0;
+  border-radius: 999px;
 }
 
 .listening-mode-switch button {
@@ -1622,6 +1628,12 @@ h1 {
     transform 160ms ease,
     background 160ms ease,
     color 160ms ease;
+}
+
+.table-tools .listening-mode-switch button {
+  min-height: 30px;
+  border-radius: 999px;
+  font-size: 12px;
 }
 
 .listening-mode-switch button:not(:disabled):hover {
@@ -3364,6 +3376,15 @@ h1 {
 .table-actions {
   display: flex;
   justify-content: flex-end;
+}
+
+.table-tools {
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) minmax(260px, 420px);
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-width: 0;
 }
 
 .hint-row.compact {

@@ -546,7 +546,21 @@ export function App() {
                 {tileLabel(mode === "discard" ? exercise.gold : mode === "listening" ? listeningExercise.gold : drawSession.gold)}
               </strong>
             </div>
-            {mode !== "listening" ? <HintControls hintLevel={hintLevel} setHintLevel={setHintLevel} compact /> : null}
+            <div className="table-tools">
+              {mode === "listening" ? (
+                <ListeningModeSwitch
+                  listeningMode={listeningMode}
+                  disabled={Boolean(listeningAnswer)}
+                  onModeChange={(nextMode) => {
+                    setListeningMode(nextMode);
+                    setListeningExercise(createListeningExercise(nextMode));
+                    setSelectedWaitIds([]);
+                    setListeningAnswer(null);
+                  }}
+                />
+              ) : null}
+              <HintControls hintLevel={hintLevel} setHintLevel={setHintLevel} compact />
+            </div>
             <div className="table-actions">
               <button className="icon-button" type="button" onClick={nextExercise} aria-label="换一题">
                 <RefreshCcw size={18} />
@@ -582,15 +596,8 @@ export function App() {
           {mode === "listening" ? (
             <ListeningPanel
               exercise={listeningExercise}
-              listeningMode={listeningMode}
               selectedWaitIds={selectedWaitIds}
               answer={listeningAnswer}
-              onModeChange={(nextMode) => {
-                setListeningMode(nextMode);
-                setListeningExercise(createListeningExercise(nextMode));
-                setSelectedWaitIds([]);
-                setListeningAnswer(null);
-              }}
               onToggleWait={toggleWait}
               onConfirm={confirmListening}
               onNext={nextExercise}
@@ -1246,19 +1253,15 @@ function DrawPlayPanel({
 
 function ListeningPanel({
   exercise,
-  listeningMode,
   selectedWaitIds,
   answer,
-  onModeChange,
   onToggleWait,
   onConfirm,
   onNext,
 }: {
   exercise: ListeningExercise;
-  listeningMode: ListeningDrillMode;
   selectedWaitIds: string[];
   answer: ListeningAnswer | null;
-  onModeChange: (mode: ListeningDrillMode) => void;
   onToggleWait: (tileId: string) => void;
   onConfirm: () => void;
   onNext: () => void;
@@ -1270,20 +1273,6 @@ function ListeningPanel({
       <div className="panel-title">
         <Search size={18} />
         选择所有听牌
-      </div>
-      <div className="listening-mode-switch" aria-label="听牌训练类型">
-        {listeningModeOptions.map((option) => (
-          <button
-            className={listeningMode === option.id ? "active" : ""}
-            key={option.id}
-            type="button"
-            onClick={() => onModeChange(option.id)}
-            disabled={Boolean(answer)}
-            title={option.description}
-          >
-            {option.label}
-          </button>
-        ))}
       </div>
       <div className="listening-focus">
         <span>{exercise.focus}</span>
@@ -1325,6 +1314,33 @@ function ListeningPanel({
           </button>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function ListeningModeSwitch({
+  listeningMode,
+  disabled,
+  onModeChange,
+}: {
+  listeningMode: ListeningDrillMode;
+  disabled?: boolean;
+  onModeChange: (mode: ListeningDrillMode) => void;
+}) {
+  return (
+    <div className="listening-mode-switch" aria-label="听牌训练类型">
+      {listeningModeOptions.map((option) => (
+        <button
+          className={listeningMode === option.id ? "active" : ""}
+          key={option.id}
+          type="button"
+          onClick={() => onModeChange(option.id)}
+          disabled={disabled}
+          title={option.description}
+        >
+          {option.label}
+        </button>
+      ))}
     </div>
   );
 }
