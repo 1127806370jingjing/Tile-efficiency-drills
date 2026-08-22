@@ -1,4 +1,4 @@
-import { Award, BookOpen, Bot, Eye, Loader2, RefreshCcw, Send, Sparkles, Target } from "lucide-react";
+import { Award, BookOpen, Bot, Eye, Loader2, Menu, RefreshCcw, Send, Sparkles, Target, X } from "lucide-react";
 import { type DragEvent, useEffect, useMemo, useState } from "react";
 import {
   type DiscardEvaluation,
@@ -93,11 +93,12 @@ export function App() {
     {
       id: crypto.randomUUID(),
       role: "assistant",
-      text: "我是你的福州麻将 AI 教练。你可以问：为什么推荐打这张、我刚才打得怎么样、这手牌怎么拆。",
+      text: "这里是牌效解析。你可以问：为什么推荐打这张、我刚才打得怎么样、这手牌怎么拆。",
     },
   ]);
   const [coachQuestion, setCoachQuestion] = useState("");
   const [coachLoading, setCoachLoading] = useState(false);
+  const [modeOpen, setModeOpen] = useState(false);
 
   useEffect(() => {
     localStorage.setItem(statsKey, JSON.stringify(stats));
@@ -213,6 +214,7 @@ export function App() {
 
   return (
     <main className="app-shell">
+      <ModeDock open={modeOpen} onToggle={() => setModeOpen((value) => !value)} />
       <section className="hero-panel">
         <div className="brand-block">
           <div className="brand-mark">福</div>
@@ -220,20 +222,6 @@ export function App() {
             <h1>福州麻将练习器</h1>
             <p>从“摸进后打哪张”开始，练会金牌、搭子和有效进张。</p>
           </div>
-        </div>
-        <div className="mode-strip" aria-label="练习模式">
-          <button className="mode-button active" type="button">
-            <Target size={18} />
-            弃牌练习
-          </button>
-          <button className="mode-button locked" type="button" disabled>
-            <Eye size={18} />
-            听牌练习
-          </button>
-          <button className="mode-button locked" type="button" disabled>
-            <Sparkles size={18} />
-            摸打到胡
-          </button>
         </div>
       </section>
 
@@ -288,6 +276,31 @@ export function App() {
         </aside>
       </section>
     </main>
+  );
+}
+
+function ModeDock({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+  return (
+    <nav className={`mode-dock ${open ? "open" : ""}`} aria-label="练习模式">
+      <button className="mode-tab" type="button" onClick={onToggle} aria-expanded={open} aria-label="切换练习模式">
+        {open ? <X size={18} /> : <Menu size={18} />}
+        <span>模式</span>
+      </button>
+      <div className="mode-drawer">
+        <button className="mode-button active" type="button">
+          <Target size={18} />
+          弃牌练习
+        </button>
+        <button className="mode-button locked" type="button" disabled>
+          <Eye size={18} />
+          听牌练习
+        </button>
+        <button className="mode-button locked" type="button" disabled>
+          <Sparkles size={18} />
+          摸打到胡
+        </button>
+      </div>
+    </nav>
   );
 }
 
@@ -543,10 +556,10 @@ function StatsPanel({ stats }: { stats: Stats }) {
     <div className="stats-panel">
       <div className="panel-title">
         <Award size={18} />
-        练习记录
+        今日概览
       </div>
       <div className="stats-grid">
-        <Metric label="正确率" value={`${accuracy}%`} />
+        <Metric label="正确" value={`${accuracy}%`} />
         <Metric label="连对" value={stats.streak} />
         <Metric label="最佳" value={stats.bestStreak} />
         <Metric label="今日" value={stats.today} />
@@ -578,7 +591,7 @@ function CoachPanel({
     <div className="coach-panel">
       <div className="panel-title">
         <Bot size={18} />
-        AI 教练
+        牌效解析
       </div>
       <div className="coach-messages" aria-live="polite">
         {messages.map((message) => (
