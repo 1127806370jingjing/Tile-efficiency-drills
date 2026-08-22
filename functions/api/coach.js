@@ -17,8 +17,7 @@ export async function onRequestPost(context) {
     return json({ error: "missing_question" }, 400);
   }
 
-  const provider = payload?.provider === "deepseek" ? "deepseek" : "openai";
-  const config = getProviderConfig(provider, env);
+  const config = getDeepSeekConfig(env);
 
   if (!config.apiKey) {
     return json(
@@ -30,59 +29,11 @@ export async function onRequestPost(context) {
     );
   }
 
-  return provider === "deepseek"
-    ? callDeepSeek(config, payload)
-    : callOpenAI(config, payload);
+  return callDeepSeek(config, payload);
 }
 
 export async function onRequestGet() {
   return json({ ok: true, message: "AI 教练接口已启用，请使用 POST 提问。" });
-}
-
-async function callOpenAI(config, payload) {
-  let response;
-  try {
-    response = await fetch("https://api.openai.com/v1/responses", {
-      method: "POST",
-      headers: {
-        Authorization: `Bearer ${config.apiKey}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        model: config.model,
-        max_output_tokens: config.maxTokens,
-        input: [
-          systemMessage(),
-          {
-            role: "user",
-            content: JSON.stringify(payload),
-          },
-        ],
-      }),
-    });
-  } catch (error) {
-    return json(
-      {
-        error: "provider_fetch_failed",
-        answer: `${config.label} 请求失败。请确认 API Key 是 OpenAI Platform 的 API key，并且该 key 有调用 ${config.model} 的权限。`,
-        detail: String(error).slice(0, 500),
-      },
-      502,
-    );
-  }
-
-  if (!response.ok) {
-    return providerError(config.label, response);
-  }
-
-  const data = await response.json();
-  const answer = cleanCoachText(extractResponseText(data));
-  return json({
-    answer: answer || "我看到了这手牌，但暂时没生成解释。你可以换个问法再试一次。",
-    provider: config.provider,
-    model: data.model || config.model,
-    usage: normalizeUsage(data.usage),
-  });
 }
 
 async function callDeepSeek(config, payload) {
@@ -139,26 +90,15 @@ function json(body, status = 200) {
   });
 }
 
-function getProviderConfig(provider, env) {
-  if (provider === "deepseek") {
-    return {
-      provider,
-      label: "DeepSeek",
-      secretName: "DEEPSEEK_API_KEY",
-      apiKey: env.DEEPSEEK_API_KEY,
-      baseUrl: env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
-      model: env.DEEPSEEK_MODEL || "deepseek-chat",
-      maxTokens: Number(env.DEEPSEEK_MAX_OUTPUT_TOKENS || env.OPENAI_MAX_OUTPUT_TOKENS || 500),
-    };
-  }
-
+function getDeepSeekConfig(env) {
   return {
-    provider: "openai",
-    label: "Codex / OpenAI",
-    secretName: "OPENAI_API_KEY",
-    apiKey: env.OPENAI_API_KEY,
-    model: env.OPENAI_MODEL || "gpt-4.1-mini",
-    maxTokens: Number(env.OPENAI_MAX_OUTPUT_TOKENS || 500),
+    provider: "deepseek",
+    label: "DeepSeek",
+    secretName: "DEEPSEEK_API_KEY",
+    apiKey: env.DEEPSEEK_API_KEY,
+    baseUrl: env.DEEPSEEK_BASE_URL || "https://api.deepseek.com",
+    model: env.DEEPSEEK_MODEL || "deepseek-chat",
+    maxTokens: Number(env.DEEPSEEK_MAX_OUTPUT_TOKENS || 500),
   };
 }
 
@@ -180,18 +120,6 @@ async function providerError(label, response) {
     },
     502,
   );
-}
-
-function extractResponseText(data) {
-  if (typeof data?.output_text === "string") return data.output_text.trim();
-
-  const parts = [];
-  for (const item of data?.output ?? []) {
-    for (const content of item?.content ?? []) {
-      if (typeof content?.text === "string") parts.push(content.text);
-    }
-  }
-  return parts.join("\n").trim();
 }
 
 function normalizeUsage(usage) {

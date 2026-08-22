@@ -482,31 +482,6 @@ h1 {
   padding-right: 2px;
 }
 
-.provider-row {
-  display: grid;
-  grid-template-columns: auto minmax(0, 1fr);
-  align-items: center;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.provider-row span {
-  color: var(--muted);
-  font-size: 13px;
-}
-
-.provider-row select {
-  min-width: 0;
-  min-height: 36px;
-  padding: 0 10px;
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  color: var(--felt-dark);
-  background: #fff;
-  font: inherit;
-  font-size: 14px;
-}
-
 .coach-message {
   width: fit-content;
   max-width: 92%;
