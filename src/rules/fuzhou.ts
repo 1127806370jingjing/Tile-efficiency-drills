@@ -12,6 +12,8 @@ export type TileInstance = Tile & {
 
 export type HintLevel = "off" | "light" | "teaching";
 
+export type ListeningDrillMode = "starter" | "multi" | "gold";
+
 export type SpecialPattern = {
   name: string;
   description: string;
@@ -39,9 +41,12 @@ export type Exercise = {
 export type ListeningExercise = {
   hand: TileInstance[];
   gold: Tile;
+  drillMode: ListeningDrillMode;
   waitingTiles: Tile[];
   waitingCopies: number;
   specialPatterns: SpecialPattern[];
+  focus: string;
+  reviewTip: string;
 };
 
 export type DrawSession = {
@@ -107,16 +112,16 @@ export function createExercise(): Exercise {
   return exercise;
 }
 
-export function createListeningExercise(): ListeningExercise {
+export function createListeningExercise(mode: ListeningDrillMode = "multi"): ListeningExercise {
   let exercise = dealListeningExercise();
   let guard = 0;
 
-  while (exercise.waitingTiles.length < 2 && guard < 180) {
+  while (!matchesListeningMode(exercise, mode) && guard < 1200) {
     exercise = dealListeningExercise();
     guard += 1;
   }
 
-  if (exercise.waitingTiles.length > 0) return exercise;
+  if (exercise.waitingTiles.length > 0) return withListeningMode(exercise, mode);
 
   guard = 0;
   while (exercise.waitingTiles.length === 0 && guard < 80) {
@@ -124,7 +129,7 @@ export function createListeningExercise(): ListeningExercise {
     guard += 1;
   }
 
-  return exercise;
+  return withListeningMode(exercise, mode);
 }
 
 export function createDrawSession(maxRounds = 18): DrawSession {
@@ -190,10 +195,69 @@ function dealListeningExercise(): ListeningExercise {
   return {
     hand,
     gold,
+    drillMode: "multi",
     waitingTiles,
     waitingCopies,
     specialPatterns: describeSpecialPatterns(hand, gold),
+    focus: "",
+    reviewTip: "",
   };
+}
+
+function matchesListeningMode(exercise: ListeningExercise, mode: ListeningDrillMode): boolean {
+  if (exercise.waitingTiles.length === 0) return false;
+
+  if (mode === "starter") {
+    return exercise.waitingTiles.length <= 2;
+  }
+
+  if (mode === "gold") {
+    const hasGoldInHand = exercise.hand.some((tile) => tile.id === exercise.gold.id);
+    const waitsGold = exercise.waitingTiles.some((tile) => tile.id === exercise.gold.id);
+    return exercise.waitingTiles.length <= 8 && (hasGoldInHand || waitsGold);
+  }
+
+  return exercise.waitingTiles.length >= 2 && exercise.waitingTiles.length <= 6;
+}
+
+function withListeningMode(exercise: ListeningExercise, mode: ListeningDrillMode): ListeningExercise {
+  const focus = getListeningFocus(exercise, mode);
+
+  return {
+    ...exercise,
+    drillMode: mode,
+    focus,
+    reviewTip: getListeningReviewTip(exercise, mode),
+  };
+}
+
+function getListeningFocus(exercise: ListeningExercise, mode: ListeningDrillMode): string {
+  if (mode === "starter") {
+    return exercise.waitingTiles.length === 1 ? "入门 · 单听识别" : "入门 · 基础两听";
+  }
+
+  if (mode === "gold") {
+    const hasGoldInHand = exercise.hand.some((tile) => tile.id === exercise.gold.id);
+    return hasGoldInHand ? "金牌专项 · 金在手牌中参与成形" : "金牌专项 · 摸金变化";
+  }
+
+  return exercise.waitingTiles.length >= 3 ? "多听进阶 · 复合多听" : "多听进阶 · 两面/双听";
+}
+
+function getListeningReviewTip(exercise: ListeningExercise, mode: ListeningDrillMode): string {
+  if (mode === "starter") {
+    return "先找还差一张的搭子或对子，再把候选牌补进手牌里试一次。";
+  }
+
+  if (mode === "gold") {
+    return "金牌可以补顺子、刻子或雀头；复盘时先固定普通面子，再看金牌最适合补哪里。";
+  }
+
+  if (exercise.waitingTiles.length >= 3) {
+    return "多听题不要只看一组搭子，连续牌和对子常常能互相转换出额外听口。";
+  }
+
+  return "先按花色找两面搭子，再确认每张进张补进去后是否能凑齐五组面子和一对。";
 }
 
 function dealExercise(): Exercise {

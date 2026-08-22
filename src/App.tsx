@@ -6,6 +6,7 @@ import {
   type Exercise,
   type HintLevel,
   type ListeningExercise,
+  type ListeningDrillMode,
   type Suit,
   type Tile,
   type TileInstance,
@@ -77,6 +78,11 @@ const suitNames: Record<Suit, string> = {
   tiao: "条",
 };
 const chineseRanks = ["", "一", "二", "三", "四", "五", "六", "七", "八", "九"];
+const listeningModeOptions: Array<{ id: ListeningDrillMode; label: string; description: string }> = [
+  { id: "starter", label: "入门", description: "单听、边张、嵌张和基础两听" },
+  { id: "multi", label: "多听", description: "默认练习，重点防漏看" },
+  { id: "gold", label: "金牌", description: "福州金牌参与的听口变化" },
+];
 
 function getDateKey(): string {
   return new Date().toISOString().slice(0, 10);
@@ -156,7 +162,8 @@ function buildReward(streak: number): RewardState | null {
 export function App() {
   const [mode, setMode] = useState<PracticeMode>("discard");
   const [exercise, setExercise] = useState<Exercise>(() => createExercise());
-  const [listeningExercise, setListeningExercise] = useState<ListeningExercise>(() => createListeningExercise());
+  const [listeningMode, setListeningMode] = useState<ListeningDrillMode>("multi");
+  const [listeningExercise, setListeningExercise] = useState<ListeningExercise>(() => createListeningExercise("multi"));
   const [drawSession, setDrawSession] = useState<DrawSession>(() => createDrawSession());
   const [answer, setAnswer] = useState<AnswerState | null>(null);
   const [drawAnswer, setDrawAnswer] = useState<AnswerState | null>(null);
@@ -237,7 +244,7 @@ export function App() {
     if (mode === "discard") {
       setExercise(createExercise());
     } else if (mode === "listening") {
-      setListeningExercise(createListeningExercise());
+      setListeningExercise(createListeningExercise(listeningMode));
       setSelectedWaitIds([]);
       setListeningAnswer(null);
     } else {
@@ -575,8 +582,15 @@ export function App() {
           {mode === "listening" ? (
             <ListeningPanel
               exercise={listeningExercise}
+              listeningMode={listeningMode}
               selectedWaitIds={selectedWaitIds}
               answer={listeningAnswer}
+              onModeChange={(nextMode) => {
+                setListeningMode(nextMode);
+                setListeningExercise(createListeningExercise(nextMode));
+                setSelectedWaitIds([]);
+                setListeningAnswer(null);
+              }}
               onToggleWait={toggleWait}
               onConfirm={confirmListening}
               onNext={nextExercise}
@@ -1232,15 +1246,19 @@ function DrawPlayPanel({
 
 function ListeningPanel({
   exercise,
+  listeningMode,
   selectedWaitIds,
   answer,
+  onModeChange,
   onToggleWait,
   onConfirm,
   onNext,
 }: {
   exercise: ListeningExercise;
+  listeningMode: ListeningDrillMode;
   selectedWaitIds: string[];
   answer: ListeningAnswer | null;
+  onModeChange: (mode: ListeningDrillMode) => void;
   onToggleWait: (tileId: string) => void;
   onConfirm: () => void;
   onNext: () => void;
@@ -1252,6 +1270,26 @@ function ListeningPanel({
       <div className="panel-title">
         <Search size={18} />
         选择所有听牌
+      </div>
+      <div className="listening-mode-switch" aria-label="听牌训练类型">
+        {listeningModeOptions.map((option) => (
+          <button
+            className={listeningMode === option.id ? "active" : ""}
+            key={option.id}
+            type="button"
+            onClick={() => onModeChange(option.id)}
+            disabled={Boolean(answer)}
+            title={option.description}
+          >
+            {option.label}
+          </button>
+        ))}
+      </div>
+      <div className="listening-focus">
+        <span>{exercise.focus}</span>
+        <strong>
+          听口 {exercise.waitingTiles.length} 种 · {exercise.waitingCopies} 张
+        </strong>
       </div>
       <p className="body-copy">点选你认为摸到即可胡的牌，可以多选；提交后会显示正确听口。</p>
       <div className="wait-grid" aria-label="听牌候选">
@@ -1902,12 +1940,12 @@ function ListeningFeedbackPanel({
           <span className="feedback-icon">
             <span className="badge-symbol">听</span>
           </span>
-          <div>
-            <strong>听牌判断</strong>
-            <span>选择所有摸到即可胡的牌</span>
-          </div>
+        <div>
+          <strong>听牌判断</strong>
+          <span>{exercise.focus}</span>
         </div>
-        <p className="feedback-brief">先找缺口，再把金牌当万能牌补进面子或雀头里试一遍。</p>
+      </div>
+      <p className="feedback-brief">{exercise.reviewTip}</p>
         {exercise.specialPatterns.length > 0 ? (
           <div className="special-list">
             {exercise.specialPatterns.map((pattern) => (
@@ -1931,7 +1969,7 @@ function ListeningFeedbackPanel({
         <div>
           <strong>{answer.correct ? "听牌判断正确" : "对照正确听口"}</strong>
           <span>
-            听牌 {waits.length} 种 · 共 {exercise.waitingCopies} 张
+            {exercise.focus} · 听牌 {waits.length} 种 · 共 {exercise.waitingCopies} 张
           </span>
         </div>
         <button className="review-next-action" type="button" onClick={onNext}>
@@ -1946,6 +1984,7 @@ function ListeningFeedbackPanel({
 
       <div className="reason-list">
         <p>{answer.correct ? "选择完整，下一题继续保持。" : "上方就是本题全部正确听口；先按花色对照，再试着把每张进张补进面子或雀头。"}</p>
+        <p>{exercise.reviewTip}</p>
       </div>
     </div>
   );

@@ -1600,6 +1600,65 @@ h1 {
   padding: 16px;
 }
 
+.listening-mode-switch {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 5px;
+  margin-top: 12px;
+  padding: 5px;
+  border-radius: 16px;
+  background: rgba(231, 236, 230, 0.72);
+}
+
+.listening-mode-switch button {
+  min-height: 38px;
+  border: 0;
+  border-radius: 12px;
+  color: var(--muted);
+  background: transparent;
+  cursor: pointer;
+  font-weight: 800;
+  transition:
+    transform 160ms ease,
+    background 160ms ease,
+    color 160ms ease;
+}
+
+.listening-mode-switch button:not(:disabled):hover {
+  transform: translateY(-1px);
+}
+
+.listening-mode-switch button.active {
+  color: #fff;
+  background: linear-gradient(135deg, var(--felt-dark), #3d9872);
+}
+
+.listening-mode-switch button:disabled {
+  cursor: default;
+  opacity: 0.72;
+}
+
+.listening-focus {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  padding: 10px 12px;
+  border-radius: 15px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.listening-focus span {
+  font-weight: 800;
+}
+
+.listening-focus strong {
+  color: var(--felt-dark);
+}
+
 .wait-grid {
   display: grid;
   grid-template-columns: repeat(9, minmax(42px, 1fr));
@@ -2616,6 +2675,28 @@ h1 {
   background: linear-gradient(135deg, #e4c76f, #b98e36);
 }
 
+.listening-mode-switch {
+  background: rgba(5, 36, 24, 0.46);
+}
+
+.listening-mode-switch button {
+  color: rgba(237, 247, 234, 0.66);
+}
+
+.listening-mode-switch button.active {
+  color: #123421;
+  background: linear-gradient(135deg, #e4c76f, #b98e36);
+}
+
+.listening-focus {
+  color: rgba(237, 247, 234, 0.74);
+  background: rgba(6, 43, 29, 0.42);
+}
+
+.listening-focus strong {
+  color: #f6fff5;
+}
+
 .mode-tab,
 .coach-form button,
 .confirm-action {
@@ -3451,6 +3532,28 @@ h1 {
 .theme-sakura .mode-button.active {
   color: #7c3b3b;
   background: linear-gradient(135deg, #ffe1a3, #f3b4c4);
+}
+
+.theme-sakura .listening-mode-switch {
+  background: rgba(255, 255, 255, 0.48);
+}
+
+.theme-sakura .listening-mode-switch button {
+  color: rgba(31, 53, 68, 0.66);
+}
+
+.theme-sakura .listening-mode-switch button.active {
+  color: #7c3b3b;
+  background: linear-gradient(135deg, #ffe1a3, #f3b4c4);
+}
+
+.theme-sakura .listening-focus {
+  color: rgba(31, 53, 68, 0.68);
+  background: rgba(255, 255, 255, 0.58);
+}
+
+.theme-sakura .listening-focus strong {
+  color: #7d4d36;
 }
 
 @media (max-width: 980px) {

@@ -173,6 +173,32 @@ describe("fuzhou rules", () => {
     expect(exercise.waitingTiles.length).toBeGreaterThan(0);
   });
 
+  it("creates multi listening exercises with at least two waits by default", () => {
+    const exercise = createListeningExercise("multi");
+
+    expect(exercise.drillMode).toBe("multi");
+    expect(exercise.waitingTiles.length).toBeGreaterThanOrEqual(2);
+    expect(exercise.waitingTiles.length).toBeLessThanOrEqual(6);
+  });
+
+  it("creates starter listening exercises with compact waits", () => {
+    const exercise = createListeningExercise("starter");
+
+    expect(exercise.drillMode).toBe("starter");
+    expect(exercise.waitingTiles.length).toBeGreaterThan(0);
+    expect(exercise.waitingTiles.length).toBeLessThanOrEqual(2);
+  });
+
+  it("creates gold listening exercises involving the gold tile", () => {
+    const exercise = createListeningExercise("gold");
+    const hasGoldInHand = exercise.hand.some((item) => item.id === exercise.gold.id);
+    const waitsGold = exercise.waitingTiles.some((item) => item.id === exercise.gold.id);
+
+    expect(exercise.drillMode).toBe("gold");
+    expect(exercise.waitingTiles.length).toBeLessThanOrEqual(8);
+    expect(hasGoldInHand || waitsGold).toBe(true);
+  });
+
   it("creates a draw session with a legal drawn hand and remaining wall", () => {
     const session = createDrawSession();
     const counts = new Map<string, number>();
