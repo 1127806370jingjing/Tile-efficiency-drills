@@ -1251,11 +1251,29 @@ h1 {
   max-width: 92%;
   padding: 10px 12px;
   border-radius: 16px;
-  white-space: pre-wrap;
   color: #31453f;
   background: rgba(241, 245, 237, 0.86);
   font-size: 14px;
   line-height: 1.55;
+}
+
+.coach-message-content {
+  display: grid;
+  gap: 7px;
+}
+
+.coach-message-block {
+  margin: 0;
+}
+
+.coach-keyword {
+  padding: 1px 5px;
+  border-radius: 999px;
+  color: #7c3b3b;
+  background: rgba(255, 218, 136, 0.52);
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+  font-weight: 800;
 }
 
 .coach-message.user {
@@ -3187,6 +3205,11 @@ h1 {
   max-width: 88%;
   color: #5f3634;
   background: linear-gradient(135deg, #ffd7df, #f0c58e);
+}
+
+.coach-drawer .coach-keyword {
+  color: #6f3e34;
+  background: rgba(255, 225, 163, 0.68);
 }
 
 .coach-drawer .panel-title {

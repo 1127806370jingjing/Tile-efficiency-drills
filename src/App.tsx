@@ -1373,7 +1373,7 @@ function CoachLauncher({
     >
       <span className={`pet-avatar ${loading ? "thinking" : "idle"}`} aria-hidden="true" />
       <span className="coach-launcher-copy">
-        <strong>流萤教练</strong>
+        <strong>流萤大宝贝</strong>
         <span>{loading ? "正在思考" : `${Math.max(0, messageCount - 1)} 条对话`}</span>
       </span>
       <Bot size={18} />
@@ -1422,7 +1422,7 @@ function CoachDrawer({
           <div className="coach-title-block">
             <span className={`pet-avatar large ${loading ? "thinking" : "talking"}`} aria-hidden="true" />
             <div>
-              <span className="label">流萤 AI 教练</span>
+              <span className="label">⬅️俺の老婆</span>
               <strong>牌效解析</strong>
             </div>
           </div>
@@ -1564,7 +1564,7 @@ function CoachPanel({
       <div className="coach-messages" aria-live="polite">
         {messages.map((message) => (
           <div className={`coach-message ${message.role}`} key={message.id}>
-            {message.text}
+            <CoachMessageText text={message.text} role={message.role} />
             {message.usage ? <TokenUsageLine usage={message.usage} model={message.model} /> : null}
           </div>
         ))}
@@ -1606,6 +1606,57 @@ function CoachPanel({
         </button>
       </form>
     </div>
+  );
+}
+
+function CoachMessageText({ text, role }: { text: string; role: CoachMessage["role"] }) {
+  if (role === "user") return <span>{text}</span>;
+
+  const blocks = splitCoachMessage(text);
+
+  return (
+    <div className="coach-message-content">
+      {blocks.map((block, index) => (
+        <p className="coach-message-block" key={`${block}-${index}`}>
+          {highlightCoachKeywords(block)}
+        </p>
+      ))}
+    </div>
+  );
+}
+
+function splitCoachMessage(text: string): string[] {
+  const normalized = text.replace(/\r\n/g, "\n").trim();
+  if (!normalized) return [];
+
+  return normalized
+    .split(/\n{2,}|\n/)
+    .flatMap((block) => {
+      const trimmed = block.trim();
+      if (trimmed.length <= 88) return [trimmed];
+      return trimmed
+        .split(/(?<=[。！？；])/)
+        .map((item) => item.trim())
+        .filter(Boolean);
+    })
+    .filter(Boolean);
+}
+
+function highlightCoachKeywords(text: string) {
+  const pattern =
+    /(推荐|优先|原因|注意|提示|复盘|下一步|金牌|听口|进张|胡牌|牌河|不建议|可以|共\s*\d+\s*张|听牌\s*\d+\s*种|打\s*[一二三四五六七八九1-9][万筒条])/g;
+  const exactPattern =
+    /^(推荐|优先|原因|注意|提示|复盘|下一步|金牌|听口|进张|胡牌|牌河|不建议|可以|共\s*\d+\s*张|听牌\s*\d+\s*种|打\s*[一二三四五六七八九1-9][万筒条])$/;
+  const parts = text.split(pattern).filter((part) => part.length > 0);
+
+  return parts.map((part, index) =>
+    exactPattern.test(part) ? (
+      <mark className="coach-keyword" key={`${part}-${index}`}>
+        {part}
+      </mark>
+    ) : (
+      <span key={`${part}-${index}`}>{part}</span>
+    ),
   );
 }
 
