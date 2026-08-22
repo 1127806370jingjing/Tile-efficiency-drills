@@ -377,7 +377,11 @@ h1 {
 }
 
 .mahjong-tile.selected {
-  transform: translateY(-10px);
+  animation: discard-away 520ms cubic-bezier(0.2, 0.9, 0.3, 1.05) both;
+  box-shadow:
+    0 0 0 4px rgba(217, 79, 53, 0.18),
+    0 30px 48px rgba(0, 0, 0, 0.22),
+    inset 0 -5px 0 rgba(24, 39, 32, 0.08);
 }
 
 .mahjong-tile.pending {
@@ -385,7 +389,25 @@ h1 {
     0 0 0 4px rgba(247, 167, 184, 0.5),
     0 22px 34px rgba(0, 0, 0, 0.24),
     inset 0 -5px 0 rgba(24, 39, 32, 0.08);
-  transform: translateY(-14px) rotate(-1deg);
+  animation: tile-ready 900ms ease-in-out infinite;
+}
+
+.mahjong-tile.pending::after {
+  position: absolute;
+  right: 50%;
+  bottom: -30px;
+  z-index: 1;
+  min-width: 66px;
+  padding: 5px 8px;
+  border-radius: 999px;
+  color: #7a3b2d;
+  background: rgba(255, 246, 247, 0.92);
+  box-shadow: 0 8px 18px rgba(98, 56, 47, 0.14);
+  content: "待打出";
+  font-size: 12px;
+  font-weight: 800;
+  transform: translateX(50%);
+  pointer-events: none;
 }
 
 .mahjong-tile.dragging {
@@ -779,6 +801,110 @@ h1 {
   font-weight: 800;
 }
 
+.reward-pop {
+  position: fixed;
+  top: 18px;
+  left: 50%;
+  z-index: 60;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  width: min(430px, calc(100vw - 28px));
+  min-height: 86px;
+  padding: 14px 16px;
+  border: 1px solid rgba(255, 255, 255, 0.74);
+  border-radius: 22px;
+  color: #5a321c;
+  background:
+    radial-gradient(circle at 12% 16%, rgba(255, 255, 255, 0.96), transparent 30%),
+    linear-gradient(135deg, rgba(255, 246, 209, 0.94), rgba(255, 229, 234, 0.92) 55%, rgba(218, 248, 230, 0.92));
+  box-shadow: 0 24px 70px rgba(88, 52, 25, 0.2);
+  backdrop-filter: blur(18px);
+  cursor: pointer;
+  overflow: hidden;
+  transform: translateX(-50%);
+  animation:
+    reward-drop 560ms cubic-bezier(0.18, 1.15, 0.3, 1) both,
+    reward-leave 420ms ease 2400ms forwards;
+}
+
+.reward-rays {
+  position: absolute;
+  inset: -42px;
+  background:
+    conic-gradient(from 12deg, rgba(255, 255, 255, 0.0), rgba(255, 255, 255, 0.42), rgba(255, 255, 255, 0)),
+    radial-gradient(circle, rgba(255, 255, 255, 0.7), transparent 58%);
+  opacity: 0.65;
+  animation: reward-spin 2600ms linear infinite;
+}
+
+.reward-medal,
+.reward-copy,
+.reward-streak,
+.reward-spark {
+  position: relative;
+}
+
+.reward-medal {
+  display: grid;
+  width: 58px;
+  height: 58px;
+  place-items: center;
+  border-radius: 20px;
+  color: #7b4b00;
+  background: linear-gradient(145deg, #fff1a8, #dba93a);
+  box-shadow: inset 0 -5px 0 rgba(111, 75, 0, 0.12), 0 14px 24px rgba(154, 111, 12, 0.18);
+  animation: medal-pop 900ms ease both;
+}
+
+.reward-copy {
+  display: grid;
+  gap: 4px;
+  text-align: left;
+}
+
+.reward-copy strong {
+  color: #5c311d;
+  font-size: 20px;
+}
+
+.reward-copy span {
+  color: rgba(92, 49, 29, 0.72);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.reward-streak {
+  display: grid;
+  min-width: 52px;
+  height: 52px;
+  place-items: center;
+  border-radius: 18px;
+  color: #fff;
+  background: linear-gradient(135deg, #d94f35, #f0b437);
+  font-size: 20px;
+  font-weight: 900;
+  box-shadow: 0 12px 22px rgba(217, 79, 53, 0.2);
+}
+
+.reward-spark {
+  position: absolute;
+  color: #d59718;
+  animation: spark-burst 1200ms ease-out both;
+}
+
+.spark-one {
+  top: 12px;
+  right: 82px;
+}
+
+.spark-two {
+  left: 84px;
+  bottom: 14px;
+  animation-delay: 120ms;
+}
+
 .action-strip {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(180px, 240px);
@@ -936,6 +1062,85 @@ h1 {
   to {
     opacity: 1;
     transform: translateY(0) scale(1);
+  }
+}
+
+@keyframes tile-ready {
+  0%,
+  100% {
+    transform: translateY(-12px) rotate(-1deg) scale(1);
+  }
+  50% {
+    transform: translateY(-18px) rotate(1deg) scale(1.035);
+  }
+}
+
+@keyframes discard-away {
+  0% {
+    opacity: 1;
+    transform: translateY(-14px) rotate(-1deg) scale(1.03);
+  }
+  48% {
+    opacity: 1;
+    transform: translateY(-34px) rotate(-4deg) scale(1.08);
+  }
+  100% {
+    opacity: 0.72;
+    transform: translateY(-76px) rotate(-9deg) scale(0.92);
+  }
+}
+
+@keyframes reward-drop {
+  0% {
+    opacity: 0;
+    transform: translate(-50%, -28px) scale(0.92);
+  }
+  62% {
+    opacity: 1;
+    transform: translate(-50%, 4px) scale(1.03);
+  }
+  100% {
+    opacity: 1;
+    transform: translate(-50%, 0) scale(1);
+  }
+}
+
+@keyframes reward-leave {
+  to {
+    opacity: 0;
+    transform: translate(-50%, -18px) scale(0.96);
+  }
+}
+
+@keyframes reward-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes medal-pop {
+  0% {
+    transform: rotate(-10deg) scale(0.7);
+  }
+  58% {
+    transform: rotate(8deg) scale(1.12);
+  }
+  100% {
+    transform: rotate(0) scale(1);
+  }
+}
+
+@keyframes spark-burst {
+  0% {
+    opacity: 0;
+    transform: scale(0.2) rotate(0);
+  }
+  35% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.55) rotate(28deg);
   }
 }
 
@@ -1105,6 +1310,28 @@ h1 {
   .wait-tile {
     flex: 0 0 54px;
     min-height: 74px;
+  }
+
+  .reward-pop {
+    top: 12px;
+    grid-template-columns: auto minmax(0, 1fr);
+    min-height: 78px;
+    padding: 12px;
+  }
+
+  .reward-medal {
+    width: 50px;
+    height: 50px;
+    border-radius: 17px;
+  }
+
+  .reward-streak {
+    grid-column: 1 / -1;
+    width: 100%;
+    height: 34px;
+    min-width: 0;
+    border-radius: 999px;
+    font-size: 16px;
   }
 
   .metric {

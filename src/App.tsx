@@ -29,6 +29,13 @@ type ListeningAnswer = {
 
 type PracticeMode = "discard" | "listening";
 
+type RewardState = {
+  id: string;
+  streak: number;
+  title: string;
+  message: string;
+};
+
 type Stats = {
   total: number;
   correct: number;
@@ -120,6 +127,28 @@ function loadModeDockTop(): number {
   return getDefaultDockTop();
 }
 
+function buildReward(streak: number): RewardState | null {
+  if (streak === 3) {
+    return {
+      id: crypto.randomUUID(),
+      streak,
+      title: "三连对",
+      message: "手感开始热起来了，继续保持这个判断节奏。",
+    };
+  }
+
+  if (streak === 5 || (streak > 5 && streak % 5 === 0)) {
+    return {
+      id: crypto.randomUUID(),
+      streak,
+      title: `${streak} 连对`,
+      message: "漂亮，这波牌效判断很稳。",
+    };
+  }
+
+  return null;
+}
+
 export function App() {
   const [mode, setMode] = useState<PracticeMode>("discard");
   const [exercise, setExercise] = useState<Exercise>(() => createExercise());
@@ -141,6 +170,8 @@ export function App() {
   const [coachQuestion, setCoachQuestion] = useState("");
   const [coachLoading, setCoachLoading] = useState(false);
   const [modeOpen, setModeOpen] = useState(false);
+  const [reward, setReward] = useState<RewardState | null>(null);
+  const previousStreakRef = useRef(stats.streak);
 
   useEffect(() => {
     localStorage.setItem(statsKey, JSON.stringify(stats));
@@ -149,6 +180,20 @@ export function App() {
   useEffect(() => {
     setHandRows(buildHandRows(mode === "discard" ? exercise.hand : listeningExercise.hand));
   }, [exercise, listeningExercise, mode]);
+
+  useEffect(() => {
+    if (!reward) return;
+    const timer = window.setTimeout(() => setReward(null), 2800);
+    return () => window.clearTimeout(timer);
+  }, [reward]);
+
+  useEffect(() => {
+    if (stats.streak > previousStreakRef.current) {
+      const nextReward = buildReward(stats.streak);
+      if (nextReward) setReward(nextReward);
+    }
+    previousStreakRef.current = stats.streak;
+  }, [stats.streak]);
 
   const bestEvaluations = useMemo(() => getBestEvaluations(exercise), [exercise]);
   const activeHand = mode === "discard" ? exercise.hand : listeningExercise.hand;
@@ -194,17 +239,7 @@ export function App() {
 
     const correct = exercise.bestDiscardIds.includes(tile.id);
     setAnswer({ tileId: tile.id, correct, evaluation });
-    setStats((current) => {
-      const streak = correct ? current.streak + 1 : 0;
-      return {
-        ...current,
-        total: current.total + 1,
-        correct: current.correct + (correct ? 1 : 0),
-        streak,
-        bestStreak: Math.max(current.bestStreak, streak),
-        today: current.today + 1,
-      };
-    });
+    recordPracticeResult(correct);
   }
 
   function switchMode(nextMode: PracticeMode) {
@@ -239,6 +274,10 @@ export function App() {
     const expected = listeningExercise.waitingTiles.map((tile) => tile.id).sort();
     const correct = selected.length === expected.length && selected.every((id, index) => id === expected[index]);
     setListeningAnswer({ selectedIds: selectedWaitIds, correct });
+    recordPracticeResult(correct);
+  }
+
+  function recordPracticeResult(correct: boolean) {
     setStats((current) => {
       const streak = correct ? current.streak + 1 : 0;
       return {
@@ -324,6 +363,7 @@ export function App() {
 
   return (
     <main className="app-shell">
+      <RewardOverlay reward={reward} onClose={() => setReward(null)} />
       <ModeDock
         mode={mode}
         open={modeOpen}
@@ -424,6 +464,30 @@ export function App() {
         </aside>
       </section>
     </main>
+  );
+}
+
+function RewardOverlay({ reward, onClose }: { reward: RewardState | null; onClose: () => void }) {
+  if (!reward) return null;
+
+  return (
+    <button key={reward.id} className="reward-pop" type="button" onClick={onClose} aria-label="关闭连胜奖励">
+      <span className="reward-rays" aria-hidden="true" />
+      <span className="reward-medal">
+        <Award size={30} />
+      </span>
+      <span className="reward-copy">
+        <strong>{reward.title}</strong>
+        <span>{reward.message}</span>
+      </span>
+      <span className="reward-streak">x{reward.streak}</span>
+      <span className="reward-spark spark-one" aria-hidden="true">
+        <Sparkles size={18} />
+      </span>
+      <span className="reward-spark spark-two" aria-hidden="true">
+        <Sparkles size={14} />
+      </span>
+    </button>
   );
 }
 
