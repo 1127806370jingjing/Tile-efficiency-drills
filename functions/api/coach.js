@@ -40,31 +40,43 @@ export async function onRequestGet() {
 }
 
 async function callOpenAI(config, payload) {
-  const response = await fetch("https://api.openai.com/v1/responses", {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: config.model,
-      max_output_tokens: config.maxTokens,
-      input: [
-        systemMessage(),
-        {
-          role: "user",
-          content: JSON.stringify(payload),
-        },
-      ],
-    }),
-  });
+  let response;
+  try {
+    response = await fetch("https://api.openai.com/v1/responses", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: config.model,
+        max_output_tokens: config.maxTokens,
+        input: [
+          systemMessage(),
+          {
+            role: "user",
+            content: JSON.stringify(payload),
+          },
+        ],
+      }),
+    });
+  } catch (error) {
+    return json(
+      {
+        error: "provider_fetch_failed",
+        answer: `${config.label} 请求失败。请确认 API Key 是 OpenAI Platform 的 API key，并且该 key 有调用 ${config.model} 的权限。`,
+        detail: String(error).slice(0, 500),
+      },
+      502,
+    );
+  }
 
   if (!response.ok) {
     return providerError(config.label, response);
   }
 
   const data = await response.json();
-  const answer = extractResponseText(data);
+  const answer = cleanCoachText(extractResponseText(data));
   return json({
     answer: answer || "我看到了这手牌，但暂时没生成解释。你可以换个问法再试一次。",
     provider: config.provider,
@@ -74,24 +86,36 @@ async function callOpenAI(config, payload) {
 }
 
 async function callDeepSeek(config, payload) {
-  const response = await fetch(`${config.baseUrl}/chat/completions`, {
-    method: "POST",
-    headers: {
-      Authorization: `Bearer ${config.apiKey}`,
-      "Content-Type": "application/json",
-    },
-    body: JSON.stringify({
-      model: config.model,
-      max_tokens: config.maxTokens,
-      messages: [
-        systemMessage(),
-        {
-          role: "user",
-          content: JSON.stringify(payload),
-        },
-      ],
-    }),
-  });
+  let response;
+  try {
+    response = await fetch(`${config.baseUrl}/chat/completions`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${config.apiKey}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        model: config.model,
+        max_tokens: config.maxTokens,
+        messages: [
+          systemMessage(),
+          {
+            role: "user",
+            content: JSON.stringify(payload),
+          },
+        ],
+      }),
+    });
+  } catch (error) {
+    return json(
+      {
+        error: "provider_fetch_failed",
+        answer: `${config.label} 请求失败。请检查 API Key、模型名和服务地址。`,
+        detail: String(error).slice(0, 500),
+      },
+      502,
+    );
+  }
 
   if (!response.ok) {
     return providerError(config.label, response);
@@ -99,7 +123,9 @@ async function callDeepSeek(config, payload) {
 
   const data = await response.json();
   return json({
-    answer: data?.choices?.[0]?.message?.content?.trim() || "我看到了这手牌，但暂时没生成解释。你可以换个问法再试一次。",
+    answer:
+      cleanCoachText(data?.choices?.[0]?.message?.content ?? "") ||
+      "我看到了这手牌，但暂时没生成解释。你可以换个问法再试一次。",
     provider: config.provider,
     model: data.model || config.model,
     usage: normalizeUsage(data.usage),
@@ -140,7 +166,7 @@ function systemMessage() {
   return {
     role: "system",
     content:
-      "你是福州麻将新手教练。只基于用户提供的手牌、金牌、候选弃牌和规则引擎结果解释牌效。回答要用中文，短句，适合新手。不要编造未提供的牌河、计分或对手信息。若规则引擎已有推荐，优先解释推荐原因；如果用户问他打的牌怎么样，要温和指出优缺点。",
+      "你是福州麻将新手教练。只基于用户提供的手牌、金牌、候选弃牌和规则引擎结果解释牌效。回答要用中文，短句，适合新手。不要编造未提供的牌河、计分或对手信息。若规则引擎已有推荐，优先解释推荐原因；如果用户问他打的牌怎么样，要温和指出优缺点。不要使用 Markdown 格式，不要使用 **、#、表格或代码块。",
   };
 }
 
@@ -175,4 +201,17 @@ function normalizeUsage(usage) {
     outputTokens: Number(usage.output_tokens || 0),
     totalTokens: Number(usage.total_tokens || 0),
   };
+}
+
+function cleanCoachText(text) {
+  return String(text || "")
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/__(.*?)__/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s*/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "• ")
+    .replace(/^\s*>\s?/gm, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }

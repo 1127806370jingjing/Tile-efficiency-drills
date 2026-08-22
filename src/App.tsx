@@ -191,7 +191,7 @@ export function App() {
           {
             id: crypto.randomUUID(),
             role: "assistant",
-            text: data.answer?.trim() || `AI 教练接口暂时不可用，错误码：${response.status}`,
+            text: cleanCoachText(data.answer) || `AI 教练接口暂时不可用，错误码：${response.status}`,
             model: `${getProviderLabel(coachProvider)} 配置检查`,
           },
         ]);
@@ -203,7 +203,7 @@ export function App() {
         {
           id: crypto.randomUUID(),
           role: "assistant",
-          text: data.answer?.trim() || buildLocalCoachReply(exercise, answer, trimmedQuestion),
+          text: cleanCoachText(data.answer) || buildLocalCoachReply(exercise, answer, trimmedQuestion),
           usage: data.usage ?? undefined,
           model: data.model,
         },
@@ -367,6 +367,19 @@ function buildLocalCoachReply(exercise: Exercise, answer: AnswerState | null, qu
       ? "注意：这张是金牌，金通常是全手牌效最高的牌，不建议随便打。"
       : `本局金牌是 ${tileLabel(exercise.gold)}，判断时要优先考虑它能补顺、补刻或补雀头。`,
   ].join("\n\n");
+}
+
+function cleanCoachText(text?: string): string {
+  return String(text ?? "")
+    .replace(/```[\s\S]*?```/g, "")
+    .replace(/\*\*(.*?)\*\*/g, "$1")
+    .replace(/__(.*?)__/g, "$1")
+    .replace(/^\s{0,3}#{1,6}\s*/gm, "")
+    .replace(/^\s*[-*+]\s+/gm, "• ")
+    .replace(/^\s*>\s?/gm, "")
+    .replace(/`([^`]+)`/g, "$1")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 }
 
 function buildHandRows(hand: TileInstance[]): HandRow[] {
