@@ -2676,3 +2676,28 @@ h1 {
     height: 10px;
   }
 }
+
+/* Sakura is a light theme, so late dark-theme overrides need explicit readable text colors. */
+.theme-sakura .feedback-brief,
+.theme-sakura .reason-list p,
+.theme-sakura .explain-block p,
+.theme-sakura .special-list span,
+.theme-sakura .top-card span,
+.theme-sakura .feedback-hero span,
+.theme-sakura .review-head span,
+.theme-sakura .coach-message {
+  color: rgba(31, 53, 68, 0.76);
+}
+
+.theme-sakura .reason-list {
+  background: rgba(255, 255, 255, 0.66);
+}
+
+.theme-sakura .top-card.best {
+  color: #1f3544;
+  background: rgba(255, 231, 190, 0.72);
+}
+
+.theme-sakura .recommend-strip strong {
+  color: #7d4d36;
+}
