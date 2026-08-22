@@ -32,7 +32,6 @@ type ListeningAnswer = {
 };
 
 type PracticeMode = "discard" | "listening" | "draw";
-type AppTheme = "night" | "sakura";
 
 type RewardState = {
   id: string;
@@ -71,7 +70,6 @@ type TokenUsage = {
 
 const statsKey = "fuzhou-mahjong-trainer-stats";
 const modeDockTopKey = "fuzhou-mahjong-mode-dock-top";
-const themeKey = "fuzhou-mahjong-theme";
 const suitOrder: Suit[] = ["wan", "tong", "tiao"];
 const suitNames: Record<Suit, string> = {
   wan: "万",
@@ -104,15 +102,6 @@ function loadStats(): Stats {
     return { ...fallback, ...parsed };
   } catch {
     return fallback;
-  }
-}
-
-function loadTheme(): AppTheme {
-  try {
-    const saved = localStorage.getItem(themeKey);
-    return saved === "sakura" ? "sakura" : "night";
-  } catch {
-    return "night";
   }
 }
 
@@ -166,7 +155,6 @@ function buildReward(streak: number): RewardState | null {
 
 export function App() {
   const [mode, setMode] = useState<PracticeMode>("discard");
-  const [theme, setTheme] = useState<AppTheme>(() => loadTheme());
   const [exercise, setExercise] = useState<Exercise>(() => createExercise());
   const [listeningExercise, setListeningExercise] = useState<ListeningExercise>(() => createListeningExercise());
   const [drawSession, setDrawSession] = useState<DrawSession>(() => createDrawSession());
@@ -189,6 +177,7 @@ export function App() {
   ]);
   const [coachQuestion, setCoachQuestion] = useState("");
   const [coachLoading, setCoachLoading] = useState(false);
+  const [coachOpen, setCoachOpen] = useState(false);
   const [modeOpen, setModeOpen] = useState(false);
   const [reward, setReward] = useState<RewardState | null>(null);
   const previousStreakRef = useRef(stats.streak);
@@ -196,10 +185,6 @@ export function App() {
   useEffect(() => {
     localStorage.setItem(statsKey, JSON.stringify(stats));
   }, [stats]);
-
-  useEffect(() => {
-    localStorage.setItem(themeKey, theme);
-  }, [theme]);
 
   useEffect(() => {
     const hand = mode === "discard" ? exercise.hand : mode === "listening" ? listeningExercise.hand : drawSession.hand;
@@ -211,6 +196,17 @@ export function App() {
     const timer = window.setTimeout(() => setReward(null), 2800);
     return () => window.clearTimeout(timer);
   }, [reward]);
+
+  useEffect(() => {
+    if (!coachOpen) return;
+
+    function closeOnEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setCoachOpen(false);
+    }
+
+    document.addEventListener("keydown", closeOnEscape);
+    return () => document.removeEventListener("keydown", closeOnEscape);
+  }, [coachOpen]);
 
   useEffect(() => {
     if (stats.streak > previousStreakRef.current) {
@@ -230,6 +226,8 @@ export function App() {
     [drawReviewEvaluations, drawSession.evaluations],
   );
   const activeHand = mode === "discard" ? exercise.hand : mode === "listening" ? listeningExercise.hand : drawSession.hand;
+  const activeGold = mode === "discard" ? exercise.gold : mode === "listening" ? listeningExercise.gold : drawSession.gold;
+  const activeAnswer = mode === "draw" ? drawAnswer : answer;
   const tilesByInstance = useMemo(
     () => new Map(activeHand.map((tile) => [tile.instanceId, tile])),
     [activeHand],
@@ -488,13 +486,36 @@ export function App() {
   }
 
   return (
-    <main className={`app-shell theme-${theme}`}>
+    <main className="app-shell theme-sakura">
       <RewardOverlay reward={reward} onClose={() => setReward(null)} />
       <ModeDock
         mode={mode}
         open={modeOpen}
         onToggle={() => setModeOpen((value) => !value)}
         onModeChange={switchMode}
+      />
+      <CoachLauncher
+        open={coachOpen}
+        loading={coachLoading}
+        messageCount={coachMessages.length}
+        onOpen={() => setCoachOpen(true)}
+      />
+      <CoachDrawer
+        open={coachOpen}
+        mode={mode}
+        gold={activeGold}
+        hand={activeHand}
+        pendingTileId={pendingTileId}
+        answer={activeAnswer}
+        listeningExercise={listeningExercise}
+        listeningAnswer={listeningAnswer}
+        drawSession={drawSession}
+        messages={coachMessages}
+        question={coachQuestion}
+        loading={coachLoading}
+        onClose={() => setCoachOpen(false)}
+        onQuestionChange={setCoachQuestion}
+        onAsk={askCoach}
       />
       <section className="hero-panel">
         <div className="brand-block">
@@ -505,25 +526,7 @@ export function App() {
           </div>
         </div>
         <div className="hero-art" aria-hidden="true">
-          <img src={theme === "sakura" ? "/sakura-coast-theme.jpg" : "/mahjong-theme-art.jpg"} alt="" />
-        </div>
-        <div className="theme-switcher" aria-label="主题切换">
-          <button
-            className={theme === "night" ? "active" : ""}
-            type="button"
-            onClick={() => setTheme("night")}
-            aria-pressed={theme === "night"}
-          >
-            夜樱牌桌
-          </button>
-          <button
-            className={theme === "sakura" ? "active" : ""}
-            type="button"
-            onClick={() => setTheme("sakura")}
-            aria-pressed={theme === "sakura"}
-          >
-            樱花海岸
-          </button>
+          <img src="/sakura-coast-theme.jpg" alt="" />
         </div>
       </section>
 
@@ -606,15 +609,6 @@ export function App() {
 
         <aside className="side-panel">
           <StatsPanel stats={stats} />
-          <CoachPanel
-            messages={coachMessages}
-            question={coachQuestion}
-            loading={coachLoading}
-            answer={mode === "draw" ? drawAnswer : answer}
-            mode={mode}
-            onQuestionChange={setCoachQuestion}
-            onAsk={askCoach}
-          />
           {mode === "discard" ? (
             <FeedbackPanel
               answer={answer}
@@ -1319,6 +1313,181 @@ function ListeningPanel({
           </button>
         ) : null}
       </div>
+    </div>
+  );
+}
+
+function CoachLauncher({
+  open,
+  loading,
+  messageCount,
+  onOpen,
+}: {
+  open: boolean;
+  loading: boolean;
+  messageCount: number;
+  onOpen: () => void;
+}) {
+  return (
+    <button
+      className={`coach-launcher ${open ? "open" : ""}`}
+      type="button"
+      onClick={onOpen}
+      aria-label="打开牌效解析"
+      aria-expanded={open}
+    >
+      <span className={`pet-avatar ${loading ? "thinking" : ""}`} aria-hidden="true" />
+      <span className="coach-launcher-copy">
+        <strong>牌效解析</strong>
+        <span>{loading ? "正在思考" : `${Math.max(0, messageCount - 1)} 条对话`}</span>
+      </span>
+      <Bot size={18} />
+    </button>
+  );
+}
+
+function CoachDrawer({
+  open,
+  mode,
+  gold,
+  hand,
+  pendingTileId,
+  answer,
+  listeningExercise,
+  listeningAnswer,
+  drawSession,
+  messages,
+  question,
+  loading,
+  onClose,
+  onQuestionChange,
+  onAsk,
+}: {
+  open: boolean;
+  mode: PracticeMode;
+  gold: Tile;
+  hand: TileInstance[];
+  pendingTileId: string | null;
+  answer: AnswerState | null;
+  listeningExercise: ListeningExercise;
+  listeningAnswer: ListeningAnswer | null;
+  drawSession: DrawSession;
+  messages: CoachMessage[];
+  question: string;
+  loading: boolean;
+  onClose: () => void;
+  onQuestionChange: (question: string) => void;
+  onAsk: (question: string) => void;
+}) {
+  return (
+    <div className={`coach-layer ${open ? "open" : ""}`} aria-hidden={!open}>
+      <button className="coach-backdrop" type="button" onClick={onClose} aria-label="关闭牌效解析遮罩" tabIndex={open ? 0 : -1} />
+      <section className="coach-drawer" role="dialog" aria-modal="true" aria-label="牌效解析">
+        <div className="coach-drawer-head">
+          <div className="coach-title-block">
+            <span className={`pet-avatar large ${loading ? "thinking" : ""}`} aria-hidden="true" />
+            <div>
+              <span className="label">AI 助手</span>
+              <strong>牌效解析</strong>
+            </div>
+          </div>
+          <button className="icon-button" type="button" onClick={onClose} aria-label="关闭牌效解析">
+            <X size={18} />
+          </button>
+        </div>
+
+        <CoachSnapshot
+          mode={mode}
+          gold={gold}
+          hand={hand}
+          pendingTileId={pendingTileId}
+          answer={answer}
+          listeningExercise={listeningExercise}
+          listeningAnswer={listeningAnswer}
+          drawSession={drawSession}
+        />
+
+        <CoachPanel
+          messages={messages}
+          question={question}
+          loading={loading}
+          answer={answer}
+          mode={mode}
+          onQuestionChange={onQuestionChange}
+          onAsk={onAsk}
+        />
+      </section>
+    </div>
+  );
+}
+
+function CoachSnapshot({
+  mode,
+  gold,
+  hand,
+  pendingTileId,
+  answer,
+  listeningExercise,
+  listeningAnswer,
+  drawSession,
+}: {
+  mode: PracticeMode;
+  gold: Tile;
+  hand: TileInstance[];
+  pendingTileId: string | null;
+  answer: AnswerState | null;
+  listeningExercise: ListeningExercise;
+  listeningAnswer: ListeningAnswer | null;
+  drawSession: DrawSession;
+}) {
+  const modeLabel = mode === "discard" ? "弃牌练习" : mode === "listening" ? "听牌练习" : "摸打到胡";
+  const pendingTile = pendingTileId ? hand.find((tile) => tile.id === pendingTileId) : undefined;
+  const selectedWaits = listeningAnswer?.selectedIds
+    .map((id) => allTileKinds.find((tile) => tile.id === id))
+    .filter((tile): tile is Tile => Boolean(tile));
+
+  return (
+    <div className="coach-snapshot">
+      <div className="snapshot-meta">
+        <span>{modeLabel}</span>
+        <strong>金牌 {tileLabel(gold)}</strong>
+        {mode === "draw" ? <span>第 {drawSession.round}/{drawSession.maxRounds} 巡</span> : null}
+      </div>
+
+      <div className="snapshot-section">
+        <span className="section-kicker">当前牌面</span>
+        <MiniInstanceTileList tiles={hand} gold={gold} />
+      </div>
+
+      <div className="snapshot-facts">
+        {pendingTile ? <span>待打出：{tileLabel(pendingTile)}</span> : null}
+        {answer ? <span>已选择：{tileLabel(answer.evaluation.tile)} · {answer.correct ? "正确" : "待复盘"}</span> : null}
+        {mode === "listening" ? (
+          <span>
+            听口：{listeningExercise.waitingTiles.length} 种
+            {selectedWaits && selectedWaits.length > 0 ? ` · 已选 ${selectedWaits.map((tile) => tileLabel(tile)).join("、")}` : ""}
+          </span>
+        ) : null}
+        {mode === "draw" ? (
+          <>
+            <span>{drawSession.drawnTile ? `摸到：${tileLabel(drawSession.drawnTile)}` : "等待下一次摸牌"}</span>
+            <span>牌河：{formatRiver(drawSession.river)}</span>
+          </>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function MiniInstanceTileList({ tiles, gold }: { tiles: TileInstance[]; gold: Tile }) {
+  return (
+    <div className="snapshot-tiles">
+      {tiles.map((tile) => (
+        <span className={`mini-tile snapshot-tile ${tile.suit} ${tile.id === gold.id ? "gold" : ""}`} key={tile.instanceId}>
+          <TileFace tile={tile} isGold={tile.id === gold.id} />
+          {tile.id === gold.id ? <span className="gold-chip">金</span> : null}
+        </span>
+      ))}
     </div>
   );
 }
