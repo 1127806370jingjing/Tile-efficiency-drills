@@ -171,6 +171,8 @@ describe("fuzhou rules", () => {
 
     expect(exercise.hand).toHaveLength(16);
     expect(exercise.waitingTiles.length).toBeGreaterThan(0);
+    expect(exercise.quality.score).toBeGreaterThan(0);
+    expect(exercise.quality.notes.length).toBeGreaterThan(0);
   });
 
   it("creates multi listening exercises with at least two waits by default", () => {

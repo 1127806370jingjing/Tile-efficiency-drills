@@ -47,6 +47,16 @@ export type ListeningExercise = {
   specialPatterns: SpecialPattern[];
   focus: string;
   reviewTip: string;
+  quality: ListeningQuality;
+};
+
+export type ListeningQuality = {
+  score: number;
+  pairCount: number;
+  sequenceCount: number;
+  partialCount: number;
+  goldCount: number;
+  notes: string[];
 };
 
 export type DrawSession = {
@@ -114,17 +124,19 @@ export function createExercise(): Exercise {
 
 export function createListeningExercise(mode: ListeningDrillMode = "multi"): ListeningExercise {
   let exercise = dealListeningExercise();
-  let guard = 0;
+  let bestMatch: ListeningExercise | null = null;
 
-  while (!matchesListeningMode(exercise, mode) && guard < 1200) {
+  for (let guard = 0; guard < 1200; guard += 1) {
+    if (matchesListeningMode(exercise, mode)) {
+      bestMatch = pickBetterListeningExercise(bestMatch, exercise);
+    }
     exercise = dealListeningExercise();
-    guard += 1;
   }
 
-  if (exercise.waitingTiles.length > 0) return withListeningMode(exercise, mode);
+  if (bestMatch) return withListeningMode(bestMatch, mode);
 
-  guard = 0;
-  while (exercise.waitingTiles.length === 0 && guard < 80) {
+  let guard = 0;
+  while ((exercise.waitingTiles.length === 0 || exercise.quality.score < 14) && guard < 120) {
     exercise = dealListeningExercise();
     guard += 1;
   }
@@ -191,6 +203,7 @@ function dealListeningExercise(): ListeningExercise {
   const waitingTiles = getWaitingTiles(hand, gold);
   const remainingCounts = getRemainingCounts(hand);
   const waitingCopies = waitingTiles.reduce((sum, tile) => sum + (remainingCounts.get(tile.id) ?? 0), 0);
+  const specialPatterns = describeSpecialPatterns(hand, gold);
 
   return {
     hand,
@@ -198,14 +211,16 @@ function dealListeningExercise(): ListeningExercise {
     drillMode: "multi",
     waitingTiles,
     waitingCopies,
-    specialPatterns: describeSpecialPatterns(hand, gold),
+    specialPatterns,
     focus: "",
     reviewTip: "",
+    quality: scoreListeningQuality(hand, gold, waitingTiles, specialPatterns),
   };
 }
 
 function matchesListeningMode(exercise: ListeningExercise, mode: ListeningDrillMode): boolean {
   if (exercise.waitingTiles.length === 0) return false;
+  if (exercise.quality.score < 22) return false;
 
   if (mode === "starter") {
     return exercise.waitingTiles.length <= 2;
@@ -221,14 +236,25 @@ function matchesListeningMode(exercise: ListeningExercise, mode: ListeningDrillM
 }
 
 function withListeningMode(exercise: ListeningExercise, mode: ListeningDrillMode): ListeningExercise {
+  const specialPatterns = describeSpecialPatterns(exercise.hand, exercise.gold);
+  const quality = scoreListeningQuality(exercise.hand, exercise.gold, exercise.waitingTiles, specialPatterns);
   const focus = getListeningFocus(exercise, mode);
 
   return {
     ...exercise,
     drillMode: mode,
+    specialPatterns,
+    quality,
     focus,
-    reviewTip: getListeningReviewTip(exercise, mode),
+    reviewTip: getListeningReviewTip({ ...exercise, specialPatterns, quality }, mode),
   };
+}
+
+function pickBetterListeningExercise(
+  current: ListeningExercise | null,
+  candidate: ListeningExercise,
+): ListeningExercise {
+  return !current || candidate.quality.score > current.quality.score ? candidate : current;
 }
 
 function getListeningFocus(exercise: ListeningExercise, mode: ListeningDrillMode): string {
@@ -245,19 +271,87 @@ function getListeningFocus(exercise: ListeningExercise, mode: ListeningDrillMode
 }
 
 function getListeningReviewTip(exercise: ListeningExercise, mode: ListeningDrillMode): string {
+  const qualityHint = exercise.quality.notes[0] ? `${exercise.quality.notes[0]} ` : "";
+
   if (mode === "starter") {
-    return "先找还差一张的搭子或对子，再把候选牌补进手牌里试一次。";
+    return `${qualityHint}先找还差一张的搭子或对子，再把候选牌补进手牌里试一次。`;
   }
 
   if (mode === "gold") {
-    return "金牌可以补顺子、刻子或雀头；复盘时先固定普通面子，再看金牌最适合补哪里。";
+    return `${qualityHint}金牌可以补顺子、刻子或雀头；复盘时先固定普通面子，再看金牌最适合补哪里。`;
   }
 
   if (exercise.waitingTiles.length >= 3) {
-    return "多听题不要只看一组搭子，连续牌和对子常常能互相转换出额外听口。";
+    return `${qualityHint}多听题不要只看一组搭子，连续牌和对子常常能互相转换出额外听口。`;
   }
 
-  return "先按花色找两面搭子，再确认每张进张补进去后是否能凑齐五组面子和一对。";
+  return `${qualityHint}先按花色找两面搭子，再确认每张进张补进去后是否能凑齐五组面子和一对。`;
+}
+
+function scoreListeningQuality(
+  hand: TileInstance[],
+  gold: Tile,
+  waitingTiles: Tile[],
+  specialPatterns: SpecialPattern[],
+): ListeningQuality {
+  const goldCount = hand.filter((tile) => tile.id === gold.id).length;
+  const countsBySuit = new Map<Suit, number[]>(suits.map((suit) => [suit, Array(10).fill(0)]));
+
+  hand
+    .filter((tile) => tile.id !== gold.id)
+    .forEach((tile) => {
+      countsBySuit.get(tile.suit)![tile.rank] += 1;
+    });
+
+  let pairCount = 0;
+  let sequenceCount = 0;
+  let partialCount = 0;
+  let isolatedCount = 0;
+
+  suits.forEach((suit) => {
+    const counts = countsBySuit.get(suit)!;
+    for (let rank = 1; rank <= 9; rank += 1) {
+      if (counts[rank] >= 2) pairCount += 1;
+      if (counts[rank] > 0) {
+        const hasNeighbor = counts[rank - 1] > 0 || counts[rank + 1] > 0;
+        const hasGap = counts[rank - 2] > 0 || counts[rank + 2] > 0;
+        if (!hasNeighbor && !hasGap) isolatedCount += 1;
+      }
+      if (rank <= 7) sequenceCount += Math.min(counts[rank], counts[rank + 1], counts[rank + 2]);
+      if (rank <= 8) partialCount += Math.min(counts[rank], counts[rank + 1]);
+      if (rank <= 7) partialCount += Math.min(counts[rank], counts[rank + 2]);
+    }
+  });
+
+  const notes: string[] = [];
+  if (sequenceCount >= 3) notes.push("这题已有多组完整面子，适合练最后一口在哪里。");
+  else if (partialCount >= 4) notes.push("这题搭子很多，重点是别只盯着一组牌。");
+  else if (pairCount >= 3) notes.push("这题对子较多，要留意双碰和雀头转换。");
+  else notes.push("这题结构比较清爽，适合逐张代入验证。");
+
+  if (goldCount > 0) notes.push(`手里有 ${goldCount} 张金，复盘时先看普通面子，再决定金补哪里。`);
+  if (specialPatterns.length > 0) notes.push("这题带福州金牌特殊形，先识别特殊形再看普通听口。");
+
+  const waitPenalty = waitingTiles.length > 8 ? (waitingTiles.length - 8) * 8 : 0;
+  const goldPenalty = goldCount >= 3 ? 30 : goldCount * 2;
+  const score =
+    sequenceCount * 12 +
+    partialCount * 5 +
+    pairCount * 4 +
+    waitingTiles.length * 7 +
+    Math.min(18, waitingTiles.length > 0 ? waitingTiles.length * 3 : 0) -
+    isolatedCount * 5 -
+    waitPenalty -
+    goldPenalty;
+
+  return {
+    score,
+    pairCount,
+    sequenceCount,
+    partialCount,
+    goldCount,
+    notes,
+  };
 }
 
 function dealExercise(): Exercise {

@@ -860,9 +860,18 @@ function buildCoachPayload(
     listening:
       mode === "listening"
         ? {
+            drillMode: listeningExercise.drillMode,
+            focus: listeningExercise.focus,
             selected: listeningAnswer?.selectedIds.map((id) => tileLabel(allTileKinds.find((tile) => tile.id === id)!)) ?? [],
             correctWaits: listeningExercise.waitingTiles.map((tile) => tileLabel(tile)),
             waitingCopies: listeningExercise.waitingCopies,
+            quality: {
+              pairCount: listeningExercise.quality.pairCount,
+              sequenceCount: listeningExercise.quality.sequenceCount,
+              partialCount: listeningExercise.quality.partialCount,
+              goldCount: listeningExercise.quality.goldCount,
+              notes: listeningExercise.quality.notes,
+            },
         }
         : null,
     drawPlay:
