@@ -1339,7 +1339,7 @@ function CoachLauncher({
       aria-label="打开牌效解析"
       aria-expanded={open}
     >
-      <span className={`pet-avatar ${loading ? "thinking" : ""}`} aria-hidden="true" />
+      <span className={`pet-avatar ${loading ? "thinking" : "idle"}`} aria-hidden="true" />
       <span className="coach-launcher-copy">
         <strong>牌效解析</strong>
         <span>{loading ? "正在思考" : `${Math.max(0, messageCount - 1)} 条对话`}</span>
@@ -1388,7 +1388,7 @@ function CoachDrawer({
       <section className="coach-drawer" role="dialog" aria-modal="true" aria-label="牌效解析">
         <div className="coach-drawer-head">
           <div className="coach-title-block">
-            <span className={`pet-avatar large ${loading ? "thinking" : ""}`} aria-hidden="true" />
+            <span className={`pet-avatar large ${loading ? "thinking" : "talking"}`} aria-hidden="true" />
             <div>
               <span className="label">AI 助手</span>
               <strong>牌效解析</strong>
