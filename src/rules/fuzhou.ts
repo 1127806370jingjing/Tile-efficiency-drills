@@ -181,8 +181,8 @@ export function drawFromWall(session: DrawSession): DrawSession {
   });
 }
 
-export function discardFromDrawSession(session: DrawSession, tileId: string): DrawSession {
-  if (!session.drawnTile || session.won) return hydrateDrawSession(session);
+export function discardFromDrawSession(session: DrawSession, tileId: string, allowWinningDiscard = false): DrawSession {
+  if (!session.drawnTile || (session.won && !allowWinningDiscard)) return hydrateDrawSession(session);
 
   const discarded = session.hand.find((tile) => tile.id === tileId);
   if (!discarded) return hydrateDrawSession(session);

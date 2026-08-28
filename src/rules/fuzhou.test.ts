@@ -231,4 +231,55 @@ describe("fuzhou rules", () => {
     expect(afterDraw.drawnTile).not.toBeNull();
     expect(afterDraw.round).toBe(2);
   });
+
+  it("blocks discarding a winning draw until the player chooses to continue", () => {
+    const winningHand = hand([
+      "wan-1",
+      "wan-1",
+      "wan-1",
+      "wan-2",
+      "wan-2",
+      "wan-2",
+      "wan-3",
+      "wan-3",
+      "wan-3",
+      "tong-1",
+      "tong-1",
+      "tong-1",
+      "tong-2",
+      "tong-2",
+      "tong-2",
+      "tiao-5",
+      "tiao-5",
+    ]);
+    const drawnTile = winningHand[16];
+    const session = {
+      hand: winningHand,
+      gold: tile("tiao-9"),
+      wall: [],
+      river: [],
+      drawnTile,
+      round: 1,
+      maxRounds: 18,
+      evaluations: evaluateDiscards(winningHand, tile("tiao-9")),
+      bestDiscardIds: [],
+      waitingTiles: [],
+      waitingCopies: 0,
+      specialPatterns: [],
+      won: true,
+      exhausted: false,
+    };
+
+    expect(canWin(session.hand, session.gold)).toBe(true);
+
+    const blocked = discardFromDrawSession(session, "wan-1");
+    expect(blocked.hand).toHaveLength(17);
+    expect(blocked.river).toHaveLength(0);
+    expect(blocked.drawnTile).not.toBeNull();
+
+    const continued = discardFromDrawSession(session, "wan-1", true);
+    expect(continued.hand).toHaveLength(16);
+    expect(continued.river).toHaveLength(1);
+    expect(continued.drawnTile).toBeNull();
+  });
 });
